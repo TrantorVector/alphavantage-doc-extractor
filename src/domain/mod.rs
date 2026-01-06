@@ -18,3 +18,12 @@ pub use models::{
     ApiCategory, ApiEndpoint, CodeExample, DocumentMetadata, DocumentStructure, OutputMetadata,
     Parameter, ParsedDocument, RawHtml, RawUrl, ValidatedUrl,
 };
+
+// Re-export parser utility functions
+pub use parser::{
+    calculate_content_score, count_children, extract_text, get_attribute, has_class,
+    identify_main_content, select_all, select_first,
+};
+
+// Re-export transformer types
+pub use transformer::HtmlCleaner;

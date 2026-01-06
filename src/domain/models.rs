@@ -6,6 +6,7 @@
 //! All models follow parse-don't-validate principle and use type-state pattern
 //! where appropriate.
 
+use crate::utils::UrlParseError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -43,20 +44,17 @@ pub struct ValidatedUrl {
 impl ValidatedUrl {
     /// Validate and create a ValidatedUrl from a RawUrl.
     /// Returns an error if the URL is invalid or uses unsupported scheme.
-    pub fn validate(raw: RawUrl) -> Result<Self, String> {
-        let url = url::Url::parse(&raw.0).map_err(|e| format!("Invalid URL '{}': {}", raw.0, e))?;
+    pub fn validate(raw: RawUrl) -> Result<Self, UrlParseError> {
+        let url = url::Url::parse(&raw.0).map_err(UrlParseError::ParseFailed)?;
 
         // Only allow http and https schemes
         if url.scheme() != "http" && url.scheme() != "https" {
-            return Err(format!(
-                "Unsupported URL scheme '{}', only http/https supported",
-                url.scheme()
-            ));
+            return Err(UrlParseError::UnsupportedScheme(url.scheme().to_string()));
         }
 
         // Must have a host
         if url.host_str().is_none() {
-            return Err(format!("URL missing host: {}", url));
+            return Err(UrlParseError::MissingHost);
         }
 
         Ok(Self { inner: url })
