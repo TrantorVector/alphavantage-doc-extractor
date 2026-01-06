@@ -4,7 +4,7 @@
 //! the DOM tree for content extraction. It includes utilities for selecting
 //! elements, extracting text, and working with HTML attributes.
 
-use crate::domain::{DocumentMetadata, ParsedDocument, RawHtml, ValidatedUrl};
+use crate::domain::{DocumentMetadata, ParsedDocument, RawHtml};
 use crate::utils::{ParseError, ParseResult};
 use scraper::{ElementRef, Html, Selector};
 use tracing::info;
