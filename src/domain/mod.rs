@@ -27,3 +27,6 @@ pub use parser::{
 
 // Re-export transformer types
 pub use transformer::HtmlCleaner;
+
+// Re-export extractor types
+pub use extractor::ContentExtractor;
