@@ -277,10 +277,17 @@ impl<'a> ContentExtractor<'a> {
         let (required_params, optional_params) = self.extract_parameters(h3_element);
         let python_example = self.extract_code_example(h3_element);
 
+        // Combine all parameters for pattern construction
+        let all_params = [&required_params[..], &optional_params[..]].concat();
+
+        // Extract or construct request pattern
+        let request_pattern = self.extract_request_pattern(h3_element, Some(&function_name), Some(&all_params));
+
         let mut endpoint = ApiEndpoint::new(function_name, description)
             .set_premium(premium_only)
             .with_required_params(required_params)
-            .with_optional_params(optional_params);
+            .with_optional_params(optional_params)
+            .with_request_pattern(request_pattern);
 
         if let Some(example) = python_example {
             endpoint = endpoint.with_python_example(example);
@@ -848,6 +855,128 @@ impl<'a> ContentExtractor<'a> {
             .collect::<Vec<&str>>()
             .join("\n")
             .to_lowercase()
+    }
+
+    /// Extract API request pattern from endpoint documentation.
+    ///
+    /// This method attempts to find an actual URL pattern in the documentation,
+    /// or constructs one from the endpoint function name and parameters if none found.
+    ///
+    /// # Arguments
+    /// * `h3_element` - The h3 element representing the endpoint
+    /// * `function_name` - Optional function name for pattern construction
+    /// * `params` - Optional parameters for pattern construction
+    ///
+    /// # Returns
+    /// A URL pattern string for the API request
+    #[instrument(skip(self, h3_element, params))]
+    pub fn extract_request_pattern(&self, h3_element: ElementRef, function_name: Option<&str>, params: Option<&[Parameter]>) -> String {
+        // First try to find an actual URL pattern in the documentation
+        if let Some(pattern) = self.find_url_pattern(h3_element) {
+            return pattern;
+        }
+
+        // If no pattern found and we have function name and params, construct one
+        if let (Some(func), Some(parameters)) = (function_name, params) {
+            return self.construct_pattern_from_endpoint(func, parameters);
+        }
+
+        // Fallback
+        "https://www.alphavantage.co/query".to_string()
+    }
+
+    /// Find URL pattern in the documentation following an h3 element.
+    ///
+    /// Searches for Alpha Vantage API URL patterns using regex.
+    ///
+    /// # Arguments
+    /// * `h3_element` - The h3 element to search after
+    ///
+    /// # Returns
+    /// The first URL pattern found, or None
+    #[instrument(skip(self, h3_element))]
+    fn find_url_pattern(&self, h3_element: ElementRef) -> Option<String> {
+        use crate::domain::parser::extract_text;
+
+        // Regex pattern for Alpha Vantage URLs
+        let url_pattern = Regex::new(r"https?://www\.alphavantage\.co/query\?[^\s<>]+")
+            .ok()?;
+
+        let mut current = h3_element.next_sibling();
+
+        // Search through following elements for URL patterns
+        while let Some(sibling) = current {
+            if let Some(element) = sibling.value().as_element() {
+                // Stop if we hit another heading
+                if element.name() == "h2" || element.name() == "h3" {
+                    break;
+                }
+
+                // Check various element types for URL patterns
+                let text_to_search = if element.name() == "a" {
+                    // For links, check the href attribute
+                    if let Some(href) = element.attr("href") {
+                        href.to_string()
+                    } else {
+                        extract_text(&ElementRef::wrap(sibling).unwrap())
+                    }
+                } else {
+                    extract_text(&ElementRef::wrap(sibling).unwrap())
+                };
+
+                // Search for URL pattern in the text
+                if let Some(captures) = url_pattern.find(&text_to_search) {
+                    let url = captures.as_str().to_string();
+                    // Validate that it contains at least function parameter
+                    if url.contains("function=") {
+                        return Some(url);
+                    }
+                }
+            }
+
+            current = sibling.next_sibling();
+        }
+
+        None
+    }
+
+    /// Construct a request pattern from endpoint function name and parameters.
+    ///
+    /// # Arguments
+    /// * `function_name` - The API function name
+    /// * `params` - List of parameters for the endpoint
+    ///
+    /// # Returns
+    /// A constructed URL pattern string
+    #[instrument(skip(self))]
+    pub fn construct_pattern_from_endpoint(&self, function_name: &str, params: &[Parameter]) -> String {
+        let url = "https://www.alphavantage.co/query?".to_string();
+        let mut query_parts = Vec::new();
+
+        // Always include function parameter
+        query_parts.push(format!("function={}", function_name));
+
+        // Add required parameters
+        for param in params {
+            if param.name == "function" || param.name == "apikey" {
+                // Skip function (already added) and apikey (added at end)
+                continue;
+            }
+            query_parts.push(format!("{}={}", param.name, param.name.to_uppercase()));
+        }
+
+        // Add common optional parameters with defaults
+        if !params.iter().any(|p| p.name == "outputsize") {
+            query_parts.push("outputsize=compact".to_string());
+        }
+        if !params.iter().any(|p| p.name == "datatype") {
+            query_parts.push("datatype=json".to_string());
+        }
+
+        // Always include apikey at the end
+        query_parts.push("apikey=YOUR_API_KEY".to_string());
+
+        url + &query_parts.join("&")
     }
 }
 
@@ -1719,5 +1848,84 @@ data = response.json()</code></pre>
 
         // Empty strings
         assert_eq!(extractor.code_similarity("", ""), 1.0);
+    }
+
+    #[test]
+    fn test_extract_request_pattern_constructs_fallback() {
+        let html = r#"<h3>TIME_SERIES_DAILY</h3>"#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let pattern = extractor.extract_request_pattern(h3, None, None);
+
+        // Should return base URL when no pattern found
+        assert_eq!(pattern, "https://www.alphavantage.co/query");
+    }
+
+    #[test]
+    fn test_find_url_pattern_found() {
+        let html = r#"
+            <h3>TIME_SERIES_DAILY</h3>
+            <p>Example: https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=demo</p>
+        "#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let pattern = extractor.find_url_pattern(h3);
+
+        assert!(pattern.is_some());
+        assert_eq!(pattern.unwrap(), "https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=demo");
+    }
+
+    #[test]
+    fn test_find_url_pattern_not_found() {
+        let html = r#"<h3>TIME_SERIES_DAILY</h3><p>No URL here</p>"#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let pattern = extractor.find_url_pattern(h3);
+
+        assert!(pattern.is_none());
+    }
+
+    #[test]
+    fn test_construct_pattern_from_endpoint() {
+        let html = Html::parse_fragment("");
+        let extractor = ContentExtractor::new(&html);
+
+        let params = vec![
+            Parameter::new("function".to_string(), "string".to_string(), "API function".to_string()),
+            Parameter::new("symbol".to_string(), "string".to_string(), "Stock symbol".to_string()),
+        ];
+
+        let pattern = extractor.construct_pattern_from_endpoint("TIME_SERIES_DAILY", &params);
+
+        assert!(pattern.starts_with("https://www.alphavantage.co/query?"));
+        assert!(pattern.contains("function=TIME_SERIES_DAILY"));
+        assert!(pattern.contains("symbol=SYMBOL"));
+        assert!(pattern.contains("outputsize=compact"));
+        assert!(pattern.contains("datatype=json"));
+        assert!(pattern.contains("apikey=YOUR_API_KEY"));
+    }
+
+    #[test]
+    fn test_construct_pattern_with_existing_optionals() {
+        let html = Html::parse_fragment("");
+        let extractor = ContentExtractor::new(&html);
+
+        let params = vec![
+            Parameter::new("function".to_string(), "string".to_string(), "API function".to_string()),
+            Parameter::new("symbol".to_string(), "string".to_string(), "Stock symbol".to_string()),
+            Parameter::new("outputsize".to_string(), "string".to_string(), "Output size".to_string()),
+        ];
+
+        let pattern = extractor.construct_pattern_from_endpoint("TIME_SERIES_DAILY", &params);
+
+        // Should not add default outputsize since it exists in params
+        assert!(!pattern.contains("outputsize=compact")); // Default should not be added
+        assert!(pattern.contains("datatype=json"));
     }
 }

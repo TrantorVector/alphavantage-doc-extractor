@@ -10,3 +10,4 @@ mod endpoint_extraction_test;
 mod html_cleaning_test;
 mod http_integration_test;
 mod parameter_extraction_test;
+mod request_pattern_test;
