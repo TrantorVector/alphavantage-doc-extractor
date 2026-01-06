@@ -187,8 +187,6 @@ mod correlation_id_tests {
 /// Test log format validation (without global subscriber)
 #[cfg(test)]
 mod format_tests {
-    use super::*;
-
     #[test]
     fn test_format_string_validation() {
         // Test that format strings are valid (without initializing)

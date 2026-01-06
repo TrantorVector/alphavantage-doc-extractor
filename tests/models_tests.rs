@@ -6,6 +6,7 @@ use alphavantage_doc_extractor::domain::{
     ApiCategory, ApiEndpoint, CodeExample, DocumentMetadata, DocumentStructure, OutputMetadata,
     Parameter, RawHtml, RawUrl, ValidatedUrl,
 };
+use alphavantage_doc_extractor::utils::UrlParseError;
 use chrono::Utc;
 use serde_json;
 
@@ -35,27 +36,35 @@ mod newtype_tests {
     #[test]
     fn test_validated_url_invalid_syntax() {
         let raw = RawUrl::new("not-a-url".to_string());
-        let result = ValidatedUrl::validate(raw);
+        let result = ValidatedUrl::try_from(raw);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid URL"));
+        match result.unwrap_err() {
+            UrlParseError::ParseFailed(_) => {}
+            _ => panic!("Expected ParseFailed error"),
+        }
     }
 
     #[test]
     fn test_validated_url_unsupported_scheme() {
         let raw = RawUrl::new("ftp://example.com".to_string());
-        let result = ValidatedUrl::validate(raw);
+        let result = ValidatedUrl::try_from(raw);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Unsupported URL scheme"));
+        match result.unwrap_err() {
+            UrlParseError::UnsupportedScheme(scheme) => assert_eq!(scheme, "ftp"),
+            _ => panic!("Expected UnsupportedScheme error"),
+        }
     }
 
     #[test]
     fn test_validated_url_missing_host() {
         let raw = RawUrl::new("https://".to_string());
-        let result = ValidatedUrl::validate(raw);
-        // url::Url::parse fails for "https://" with "empty host" error
+        let result = ValidatedUrl::try_from(raw);
+        // url::Url::parse fails for "https://" with empty host
         assert!(result.is_err());
-        let err_msg = result.unwrap_err();
-        assert!(err_msg.contains("empty host"));
+        match result.unwrap_err() {
+            UrlParseError::ParseFailed(_) => {} // url::Url::parse fails for this
+            _ => panic!("Expected ParseFailed error"),
+        }
     }
 
     #[test]

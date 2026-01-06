@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alpha Vantage API Documentation</title>
+    <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body>
+    <header class="site-header">
+        <nav class="main-nav">
+            <div class="nav-brand">
+                <h1>Alpha Vantage</h1>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/documentation">Documentation</a></li>
+                <li><a href="/pricing">Pricing</a></li>
+                <li><a href="/support">Support</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="content">
+        <div class="api-section">
+            <h2 id="stock-time-series-data">Stock Time Series Data</h2>
+            <p>This API returns daily time series (date, daily open, daily high, daily low, daily close, daily volume) of the global equity specified.</p>
+
+            <h3>API Parameters</h3>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Required</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>function</code></td>
+                        <td>Yes</td>
+                        <td>The time series of your choice</td>
+                    </tr>
+                    <tr>
+                        <td><code>symbol</code></td>
+                        <td>Yes</td>
+                        <td>The name of the equity of your choice</td>
+                    </tr>
+                    <tr>
+                        <td><code>apikey</code></td>
+                        <td>Yes</td>
+                        <td>Your API key</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Examples</h3>
+            <div class="code-example">
+                <pre><code>https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&amp;symbol=IBM&amp;apikey=demo</code></pre>
+            </div>
+
+            <p class="premium-note">Premium endpoints available for enhanced data access.</p>
+        </div>
+
+        <div class="api-section">
+            <h2 id="foreign-exchange">Foreign Exchange</h2>
+            <p>This API returns the realtime exchange rate for any pair of digital currency (e.g., Bitcoin) or physical currency (e.g., USD).</p>
+
+            <h3>API Parameters</h3>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Required</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>function</code></td>
+                        <td>Yes</td>
+                        <td>CURRENCY_EXCHANGE_RATE</td>
+                    </tr>
+                    <tr>
+                        <td><code>from_currency</code></td>
+                        <td>Yes</td>
+                        <td>The currency you would like to get the exchange rate for</td>
+                    </tr>
+                    <tr>
+                        <td><code>to_currency</code></td>
+                        <td>Yes</td>
+                        <td>The destination currency for the exchange rate</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <footer class="site-footer">
+        <p>&copy; 2024 Alpha Vantage. All rights reserved.</p>
+    </footer>
+</body>
+</html>

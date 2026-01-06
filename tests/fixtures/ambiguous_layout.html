@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ambiguous Layout - Multiple Content Areas</title>
+</head>
+<body>
+    <header>
+        <h1>Site Header</h1>
+        <nav>Home | About | Contact</nav>
+    </header>
+
+    <!-- Small content area - should not be selected -->
+    <div class="small-content">
+        <p>This is a small content area with minimal text.</p>
+        <p>It has only two paragraphs.</p>
+    </div>
+
+    <!-- Medium content area - should not be selected -->
+    <section class="medium-content">
+        <h2>Medium Section</h2>
+        <p>This section has more content than the small one.</p>
+        <p>It includes a heading and several paragraphs.</p>
+        <p>But it still shouldn't be the main content area.</p>
+        <p>The scoring algorithm should prefer the largest area.</p>
+    </section>
+
+    <!-- Large main content area - should be selected by scoring -->
+    <div class="large-content">
+        <h1>Main Documentation</h1>
+        <p>Welcome to the Alpha Vantage API documentation.</p>
+        <p>This is the primary content area that users are looking for.</p>
+        <p>It contains extensive documentation about our APIs.</p>
+
+        <section>
+            <h2>API Overview</h2>
+            <p>Our API provides access to financial market data including stocks, forex, and cryptocurrencies.</p>
+            <p>The API is designed to be simple to use while providing comprehensive data.</p>
+
+            <h3>Authentication</h3>
+            <p>All API requests require an API key for authentication.</p>
+            <p>You can obtain a free API key by registering on our website.</p>
+
+            <h3>Rate Limits</h3>
+            <p>Free tier: 5 API calls per minute, 500 calls per day</p>
+            <p>Premium tier: Higher limits available</p>
+        </section>
+
+        <section>
+            <h2>Stock APIs</h2>
+
+            <h3>TIME_SERIES_INTRADAY</h3>
+            <p>Get intraday time series data for stocks.</p>
+            <table>
+                <tr><th>Parameter</th><th>Required</th><th>Description</th></tr>
+                <tr><td>function</td><td>Yes</td><td>TIME_SERIES_INTRADAY</td></tr>
+                <tr><td>symbol</td><td>Yes</td><td>Stock symbol</td></tr>
+                <tr><td>interval</td><td>Yes</td><td>Time interval (1min, 5min, etc.)</td></tr>
+                <tr><td>apikey</td><td>Yes</td><td>Your API key</td></tr>
+            </table>
+            <pre><code>function=TIME_SERIES_INTRADAY&symbol=IBM&interval=5min&apikey=demo</code></pre>
+
+            <h3>TIME_SERIES_DAILY</h3>
+            <p>Get daily time series data for stocks.</p>
+            <pre><code>function=TIME_SERIES_DAILY&symbol=IBM&apikey=demo</code></pre>
+
+            <h3>TIME_SERIES_WEEKLY</h3>
+            <p>Get weekly time series data for stocks.</p>
+            <pre><code>function=TIME_SERIES_WEEKLY&symbol=IBM&apikey=demo</code></pre>
+        </section>
+
+        <section>
+            <h2>Forex APIs</h2>
+
+            <h3>CURRENCY_EXCHANGE_RATE</h3>
+            <p>Get the realtime exchange rate for any pair of currencies.</p>
+            <table>
+                <tr><th>Parameter</th><th>Required</th><th>Description</th></tr>
+                <tr><td>function</td><td>Yes</td><td>CURRENCY_EXCHANGE_RATE</td></tr>
+                <tr><td>from_currency</td><td>Yes</td><td>The base currency</td></tr>
+                <tr><td>to_currency</td><td>Yes</td><td>The target currency</td></tr>
+                <tr><td>apikey</td><td>Yes</td><td>Your API key</td></tr>
+            </table>
+            <pre><code>function=CURRENCY_EXCHANGE_RATE&from_currency=USD&to_currency=EUR&apikey=demo</code></pre>
+        </section>
+
+        <section>
+            <h2>Python Examples</h2>
+            <pre><code>import requests
+
+# Get stock data
+url = 'https://www.alphavantage.co/query'
+params = {'function': 'TIME_SERIES_DAILY', 'symbol': 'IBM', 'apikey': 'your_key'}
+response = requests.get(url, params=params)
+data = response.json()
+
+# Get forex data
+params = {'function': 'CURRENCY_EXCHANGE_RATE', 'from_currency': 'USD', 'to_currency': 'EUR', 'apikey': 'your_key'}
+response = requests.get(url, params=params)
+forex_data = response.json()</code></pre>
+        </section>
+    </div>
+
+    <!-- Another small content area -->
+    <aside class="sidebar">
+        <h3>Quick Links</h3>
+        <ul>
+            <li><a href="#api-overview">API Overview</a></li>
+            <li><a href="#examples">Examples</a></li>
+        </ul>
+    </aside>
+
+    <footer>
+        <p>© 2024 Alpha Vantage Documentation</p>
+    </footer>
+</body>
+</html>

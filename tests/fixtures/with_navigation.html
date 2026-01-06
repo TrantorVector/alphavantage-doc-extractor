@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Document with Navigation</title>
+    <script src="/js/main.js"></script>
+    <style>
+        .sidebar { float: left; width: 200px; }
+        .content { margin-left: 220px; }
+    </style>
+</head>
+<body>
+    <nav class="main-nav">
+        <ul class="nav-menu">
+            <li><a href="/">Home</a></li>
+            <li><a href="/docs">Documentation</a></li>
+            <li><a href="/api">API Reference</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+        </ul>
+    </nav>
+
+    <aside class="sidebar">
+        <h3>Table of Contents</h3>
+        <ul class="toc">
+            <li><a href="#intro">Introduction</a></li>
+            <li><a href="#getting-started">Getting Started</a></li>
+            <li><a href="#api-endpoints">API Endpoints</a></li>
+        </ul>
+
+        <div class="newsletter">
+            <h4>Subscribe</h4>
+            <p>Get the latest updates</p>
+            <input type="email" placeholder="Your email">
+            <button>Subscribe</button>
+        </div>
+    </aside>
+
+    <div class="content">
+        <h1>API Documentation</h1>
+
+        <section id="intro">
+            <h2>Introduction</h2>
+            <p>Welcome to our API documentation. This guide will help you get started with our REST API.</p>
+        </section>
+
+        <section id="getting-started">
+            <h2>Getting Started</h2>
+            <p>To use our API, you need to obtain an API key from our developer portal.</p>
+            <div class="code-example">
+                <pre><code>curl -X GET "https://api.example.com/data" -H "Authorization: Bearer YOUR_API_KEY"</code></pre>
+            </div>
+        </section>
+
+        <section id="api-endpoints">
+            <h2>API Endpoints</h2>
+
+            <h3>GET /users</h3>
+            <p>Retrieve a list of users.</p>
+            <table>
+                <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+                <tr><td>limit</td><td>integer</td><td>Maximum number of results</td></tr>
+                <tr><td>offset</td><td>integer</td><td>Number of results to skip</td></tr>
+            </table>
+
+            <h3>POST /users</h3>
+            <p>Create a new user.</p>
+            <pre><code>{
+  "name": "John Doe",
+  "email": "john@example.com"
+}</code></pre>
+        </section>
+    </div>
+
+    <footer class="site-footer">
+        <div class="footer-content">
+            <p>&copy; 2024 Example Company. All rights reserved.</p>
+            <div class="social-links">
+                <a href="https://twitter.com/example">Twitter</a>
+                <a href="https://github.com/example">GitHub</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        console.log('Page loaded');
+        // Analytics tracking
+        (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+        (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+        m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+        })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+        ga('create', 'UA-XXXXX-Y', 'auto');
+        ga('send', 'pageview');
+    </script>
+</body>
+</html>

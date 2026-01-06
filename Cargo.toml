@@ -13,10 +13,14 @@ clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 # HTTP
-reqwest = { version = "0.11", default-features = false, features = ["rustls-tls"] }
-scraper = "0.18"
-html5ever = "0.26"
-url = "2.5"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+scraper = "0.22"
+html5ever = "0.27"
+url = "2.5.4"
+
+# Force idna_adapter 1.0.0 to avoid dragging in latest ICU crates that require Rust 1.83
+idna_adapter = "=1.0.0"
+
 # Errors
 thiserror = "1.0"
 anyhow = "1.0"
@@ -27,7 +31,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter", "fmt"] }
 # Utils
 chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.6", features = ["v4", "serde"] }
+uuid = { version = "1.4", features = ["v4", "serde"] }
 regex = "1.10"
 
 [dev-dependencies]
