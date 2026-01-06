@@ -192,7 +192,7 @@ pub fn calculate_content_score(element: &ElementRef) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::RawUrl;
+    use crate::domain::{RawUrl, ValidatedUrl};
 
     #[test]
     fn test_document_parsing_with_title() {
