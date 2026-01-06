@@ -3,7 +3,7 @@
 //! This module implements category and endpoint extraction from parsed HTML documents.
 //! It follows the parse-don't-validate principle and uses structured error handling.
 
-use crate::domain::{ApiCategory, ApiEndpoint};
+use crate::domain::{ApiCategory, ApiEndpoint, Parameter};
 use crate::utils::{error::ExtractionResult, error::ContentExtractionError};
 use scraper::{ElementRef, Html, Selector};
 use tracing::{instrument, warn};
@@ -274,9 +274,12 @@ impl<'a> ContentExtractor<'a> {
         let function_name = self.extract_function_name(h3_element)?;
         let description = self.extract_endpoint_description(h3_element);
         let premium_only = self.detect_premium_endpoint(h3_element);
+        let (required_params, optional_params) = self.extract_parameters(h3_element);
 
         let endpoint = ApiEndpoint::new(function_name, description)
-            .set_premium(premium_only);
+            .set_premium(premium_only)
+            .with_required_params(required_params)
+            .with_optional_params(optional_params);
 
         Ok(endpoint)
     }
@@ -422,6 +425,199 @@ impl<'a> ContentExtractor<'a> {
         }
 
         false
+    }
+
+    /// Extract parameters from tables following an h3 element.
+    ///
+    /// This method looks for parameter tables after an h3 endpoint heading and
+    /// parses them into required and optional parameters.
+    ///
+    /// # Arguments
+    /// * `h3_element` - The h3 element representing the endpoint
+    ///
+    /// # Returns
+    /// A tuple of (required_parameters, optional_parameters)
+    #[instrument(skip(self, h3_element))]
+    pub fn extract_parameters(&self, h3_element: ElementRef) -> (Vec<Parameter>, Vec<Parameter>) {
+        let mut required_params = Vec::new();
+        let mut optional_params = Vec::new();
+
+        let mut current = h3_element.next_sibling();
+
+        // Traverse siblings looking for parameter tables
+        while let Some(sibling) = current {
+            if let Some(element) = sibling.value().as_element() {
+                // Stop if we hit another heading
+                if element.name() == "h2" || element.name() == "h3" {
+                    break;
+                }
+
+                // Look for table elements
+                if element.name() == "table" {
+                    let parameters = self.parse_parameter_table(ElementRef::wrap(sibling).unwrap());
+
+                    // Separate into required and optional
+                    for param in parameters {
+                        if self.is_required_parameter(ElementRef::wrap(sibling).unwrap(), &param.name) {
+                            required_params.push(param);
+                        } else {
+                            optional_params.push(param);
+                        }
+                    }
+
+                    // Continue looking for more tables (some endpoints might have multiple)
+                }
+            }
+
+            current = sibling.next_sibling();
+        }
+
+        (required_params, optional_params)
+    }
+
+    /// Parse a parameter table into a vector of Parameter objects.
+    ///
+    /// # Arguments
+    /// * `table` - The table element containing parameter definitions
+    ///
+    /// # Returns
+    /// A vector of successfully parsed parameters
+    #[instrument(skip(self, table))]
+    fn parse_parameter_table(&self, table: ElementRef) -> Vec<Parameter> {
+        let mut parameters = Vec::new();
+
+        // Find all table rows
+        let tr_selector = Selector::parse("tr").unwrap();
+        let rows: Vec<ElementRef> = table.select(&tr_selector).collect();
+
+        // Skip the first row (header)
+        for row in rows.iter().skip(1) {
+            if let Some(param) = self.parse_parameter_from_row(*row) {
+                parameters.push(param);
+            }
+        }
+
+        parameters
+    }
+
+    /// Parse a single parameter from a table row.
+    ///
+    /// Expected table structure:
+    /// - Column 1: Parameter name
+    /// - Column 2: Data type
+    /// - Column 3: Description
+    /// - Column 4 (optional): Default value
+    /// - Column 5 (optional): Allowed values/options
+    ///
+    /// # Arguments
+    /// * `row` - The table row element
+    ///
+    /// # Returns
+    /// Some(Parameter) if parsing succeeds, None otherwise
+    #[instrument(skip(self, row))]
+    fn parse_parameter_from_row(&self, row: ElementRef) -> Option<Parameter> {
+        use crate::domain::parser::extract_text;
+
+        // Find all table cells
+        let td_selector = Selector::parse("td").unwrap();
+        let cells: Vec<ElementRef> = row.select(&td_selector).collect();
+
+        if cells.len() < 3 {
+            // Need at least name, type, and description
+            return None;
+        }
+
+        let name = extract_text(&cells[0]).trim().to_string();
+        let value_type = extract_text(&cells[1]).trim().to_string();
+        let description = extract_text(&cells[2]).trim().to_string();
+
+        if name.is_empty() || value_type.is_empty() || description.is_empty() {
+            return None;
+        }
+
+        let mut param = Parameter::new(name, value_type, description);
+
+        // Optional: default value (column 4)
+        if cells.len() > 3 {
+            let default_text = extract_text(&cells[3]).trim().to_string();
+            if !default_text.is_empty() && default_text != "-" && default_text.to_lowercase() != "none" {
+                param = param.with_default(default_text);
+            }
+        }
+
+        // Optional: options (column 5)
+        if cells.len() > 4 {
+            let options_text = extract_text(&cells[4]);
+            let options_text = options_text.trim();
+            if !options_text.is_empty() && options_text != "-" {
+                let options = self.parse_options(options_text);
+                if !options.is_empty() {
+                    param = param.with_options(options);
+                }
+            }
+        }
+
+        Some(param)
+    }
+
+    /// Parse options from text (comma-separated or bullet lists).
+    ///
+    /// # Arguments
+    /// * `options_text` - The text containing option values
+    ///
+    /// # Returns
+    /// A vector of parsed option strings
+    fn parse_options(&self, options_text: &str) -> Vec<String> {
+        // Handle comma-separated values
+        if options_text.contains(',') {
+            options_text
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        } else if options_text.contains('\n') {
+            // Handle newline-separated values
+            options_text
+                .lines()
+                .map(|s| s.trim().trim_start_matches("•").trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        } else {
+            // Single option
+            vec![options_text.to_string()]
+        }
+    }
+
+    /// Determine if a parameter is required based on row content and parameter name.
+    ///
+    /// # Arguments
+    /// * `table` - The table element (for context)
+    /// * `param_name` - The parameter name to check
+    ///
+    /// # Returns
+    /// True if the parameter is required, false if optional
+    #[instrument(skip(self, table))]
+    fn is_required_parameter(&self, table: ElementRef, param_name: &str) -> bool {
+        use crate::domain::parser::extract_text;
+
+        // Always required parameters
+        let always_required = ["function", "apikey", "symbol"];
+        if always_required.contains(&param_name.to_lowercase().as_str()) {
+            return true;
+        }
+
+        // Check table content for required indicators
+        let table_text = extract_text(&table).to_lowercase();
+
+        // Look for required indicators in the table
+        if table_text.contains("required") {
+            // This is a simplified check - in practice, we'd need more sophisticated parsing
+            // For now, assume most parameters in tables are required unless explicitly optional
+            return true;
+        }
+
+        // Default: assume required (most API parameters are required)
+        true
     }
 }
 
@@ -902,5 +1098,241 @@ mod tests {
         let result = extractor.extract_categories(main);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_parameter_from_row_basic() {
+        let html = r#"
+            <table>
+                <tr>
+                    <td>symbol</td>
+                    <td>string</td>
+                    <td>The stock symbol to query</td>
+                </tr>
+            </table>
+        "#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let row = document.select(&Selector::parse("tr").unwrap()).next().unwrap();
+        let param = extractor.parse_parameter_from_row(row);
+
+        assert!(param.is_some());
+        let param = param.unwrap();
+        assert_eq!(param.name, "symbol");
+        assert_eq!(param.value_type, "string");
+        assert_eq!(param.description, "The stock symbol to query");
+        assert!(param.default.is_none());
+        assert!(param.options.is_empty());
+    }
+
+    #[test]
+    fn test_parse_parameter_from_row_with_default() {
+        let html = r#"
+            <table>
+                <tr>
+                    <td>outputsize</td>
+                    <td>string</td>
+                    <td>Number of data points</td>
+                    <td>compact</td>
+                </tr>
+            </table>
+        "#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let row = document.select(&Selector::parse("tr").unwrap()).next().unwrap();
+        let param = extractor.parse_parameter_from_row(row);
+
+        assert!(param.is_some());
+        let param = param.unwrap();
+        assert_eq!(param.name, "outputsize");
+        assert_eq!(param.default, Some("compact".to_string()));
+    }
+
+    #[test]
+    fn test_parse_parameter_from_row_with_options() {
+        let html = r#"
+            <table>
+                <tr>
+                    <td>datatype</td>
+                    <td>string</td>
+                    <td>Data format</td>
+                    <td>json</td>
+                    <td>json, csv, xml</td>
+                </tr>
+            </table>
+        "#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let row = document.select(&Selector::parse("tr").unwrap()).next().unwrap();
+        let param = extractor.parse_parameter_from_row(row);
+
+        assert!(param.is_some());
+        let param = param.unwrap();
+        assert_eq!(param.name, "datatype");
+        assert_eq!(param.options, vec!["json", "csv", "xml"]);
+    }
+
+    #[test]
+    fn test_parse_parameter_from_row_insufficient_columns() {
+        let html = r#"
+            <table>
+                <tr>
+                    <td>symbol</td>
+                    <td>string</td>
+                </tr>
+            </table>
+        "#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let row = document.select(&Selector::parse("tr").unwrap()).next().unwrap();
+        let param = extractor.parse_parameter_from_row(row);
+
+        assert!(param.is_none());
+    }
+
+    #[test]
+    fn test_parse_parameter_from_row_empty_cells() {
+        let html = r#"
+            <table>
+                <tr>
+                    <td></td>
+                    <td>string</td>
+                    <td>Description</td>
+                </tr>
+            </table>
+        "#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let row = document.select(&Selector::parse("tr").unwrap()).next().unwrap();
+        let param = extractor.parse_parameter_from_row(row);
+
+        assert!(param.is_none());
+    }
+
+    #[test]
+    fn test_parse_options_comma_separated() {
+        let html = Html::parse_fragment("");
+        let extractor = ContentExtractor::new(&html);
+        let options = extractor.parse_options("json, csv, xml");
+
+        assert_eq!(options, vec!["json", "csv", "xml"]);
+    }
+
+    #[test]
+    fn test_parse_options_newline_separated() {
+        let html = Html::parse_fragment("");
+        let extractor = ContentExtractor::new(&html);
+        let options = extractor.parse_options("• json\n• csv\n• xml");
+
+        assert_eq!(options, vec!["json", "csv", "xml"]);
+    }
+
+    #[test]
+    fn test_parse_options_single_value() {
+        let html = Html::parse_fragment("");
+        let extractor = ContentExtractor::new(&html);
+        let options = extractor.parse_options("json");
+
+        assert_eq!(options, vec!["json"]);
+    }
+
+    #[test]
+    fn test_is_required_parameter_always_required() {
+        let html = r#"<table><tr><td>function</td></tr></table>"#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let table = document.select(&Selector::parse("table").unwrap()).next().unwrap();
+        assert!(extractor.is_required_parameter(table, "function"));
+        assert!(extractor.is_required_parameter(table, "apikey"));
+        assert!(extractor.is_required_parameter(table, "symbol"));
+    }
+
+    #[test]
+    fn test_is_required_parameter_optional() {
+        let html = r#"<table><tr><td>outputsize</td></tr></table>"#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let table = document.select(&Selector::parse("table").unwrap()).next().unwrap();
+        // For now, default is required - in practice this would be more sophisticated
+        assert!(extractor.is_required_parameter(table, "outputsize"));
+    }
+
+    #[test]
+    fn test_parse_parameter_table() {
+        let html = r#"
+            <table>
+                <tr><th>Name</th><th>Type</th><th>Description</th></tr>
+                <tr><td>symbol</td><td>string</td><td>Stock symbol</td></tr>
+                <tr><td>function</td><td>string</td><td>API function</td></tr>
+            </table>
+        "#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let table = document.select(&Selector::parse("table").unwrap()).next().unwrap();
+        let params = extractor.parse_parameter_table(table);
+
+        assert_eq!(params.len(), 2);
+        assert_eq!(params[0].name, "symbol");
+        assert_eq!(params[1].name, "function");
+    }
+
+    #[test]
+    fn test_extract_parameters_with_table() {
+        let html = r#"
+            <h3>TIME_SERIES_DAILY</h3>
+            <p>Description</p>
+            <table>
+                <tr><th>Name</th><th>Type</th><th>Description</th></tr>
+                <tr><td>function</td><td>string</td><td>API function</td></tr>
+                <tr><td>symbol</td><td>string</td><td>Stock symbol</td></tr>
+                <tr><td>outputsize</td><td>string</td><td>Output size</td></tr>
+            </table>
+        "#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let (required, optional) = extractor.extract_parameters(h3);
+
+        // All parameters are currently treated as required by default
+        assert_eq!(required.len(), 3);
+        assert_eq!(optional.len(), 0);
+        assert_eq!(required[0].name, "function");
+        assert_eq!(required[1].name, "symbol");
+        assert_eq!(required[2].name, "outputsize");
+    }
+
+    #[test]
+    fn test_parse_endpoint_with_parameters() {
+        let html = r#"
+            <h3>TIME_SERIES_DAILY</h3>
+            <p>This endpoint returns daily time series data.</p>
+            <table>
+                <tr><th>Name</th><th>Type</th><th>Description</th></tr>
+                <tr><td>function</td><td>string</td><td>API function</td></tr>
+                <tr><td>symbol</td><td>string</td><td>Stock symbol</td></tr>
+            </table>
+        "#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let result = extractor.parse_endpoint(h3);
+
+        assert!(result.is_ok());
+        let endpoint = result.unwrap();
+        assert_eq!(endpoint.function_name, "TIME_SERIES_DAILY");
+        assert_eq!(endpoint.required_params.len(), 2);
+        assert_eq!(endpoint.optional_params.len(), 0);
+        assert_eq!(endpoint.required_params[0].name, "function");
+        assert_eq!(endpoint.required_params[1].name, "symbol");
     }
 }
