@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Alpha Vantage API - Duplicate Code Examples</title>
+</head>
+<body>
+    <div id="main-content">
+        <h1>Alpha Vantage API Documentation</h1>
+
+        <h2>Time Series Data</h2>
+        <p>This category provides access to real-time and historical time series data for stocks, ETFs, and digital currencies. All data is delivered in JSON format and includes intraday, daily, weekly, and monthly intervals.</p>
+
+        <h3>TIME_SERIES_DAILY</h3>
+        <p>This API returns daily time series data.</p>
+
+        <h4>Python Example</h4>
+        <pre><code>import requests
+
+url = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=demo'
+r = requests.get(url)
+data = r.json()
+
+print(data)</code></pre>
+
+        <h3>TIME_SERIES_INTRADAY</h3>
+        <p>This API returns intraday time series data.</p>
+
+        <h4>Python Example</h4>
+        <pre><code>import requests
+
+url = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=demo'
+r = requests.get(url)
+data = r.json()
+
+print(data)</code></pre>
+
+        <h3>TIME_SERIES_WEEKLY</h3>
+        <p>This API returns weekly time series data.</p>
+
+        <h4>Python Example</h4>
+        <pre><code>import requests
+
+url = 'https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY&symbol=IBM&apikey=demo'
+r = requests.get(url)
+data = r.json()
+
+print(data)</code></pre>
+
+        <h3>TIME_SERIES_MONTHLY</h3>
+        <p>This API returns monthly time series data.</p>
+
+        <h4>Python Example</h4>
+        <pre><code>import requests
+
+url = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=demo'
+r = requests.get(url)
+data = r.json()
+
+print(data)</code></pre>
+
+        <h3>GLOBAL_QUOTE</h3>
+        <p>This API returns real-time quote data.</p>
+
+        <h4>Python Example</h4>
+        <pre><code>import requests
+
+# This is a slightly different version with comments
+url = 'https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=AAPL&apikey=demo'
+response = requests.get(url)  # Make the request
+quote_data = response.json()  # Parse JSON
+
+print(quote_data)  # Display the result</code></pre>
+
+        <h4>Another Python Example</h4>
+        <pre><code>import requests
+
+# Nearly identical to the first example
+url = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=demo'
+r = requests.get(url)
+data = r.json()
+
+print(data)</code></pre>
+    </div>
+</body>
+</html>

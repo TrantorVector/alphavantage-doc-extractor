@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Alpha Vantage API - Mixed Language Examples</title>
+</head>
+<body>
+    <div id="main-content">
+        <h1>Alpha Vantage API Documentation</h1>
+
+        <h2>Time Series Data</h2>
+        <p>This category provides access to real-time and historical time series data for stocks, ETFs, and digital currencies. All data is delivered in JSON format and includes intraday, daily, weekly, and monthly intervals.</p>
+
+        <h3>TIME_SERIES_DAILY</h3>
+        <p>This API returns daily time series data.</p>
+
+        <h4>Python Example</h4>
+        <pre><code class="language-python">import requests
+
+url = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=demo'
+response = requests.get(url)
+data = response.json()
+
+print(data)</code></pre>
+
+        <h4>R Example</h4>
+        <pre><code class="language-r">library(httr)
+
+url <- 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=demo'
+response <- GET(url)
+data <- content(response, "parsed")
+
+print(data)</code></pre>
+
+        <h4>Excel VBA Example</h4>
+        <pre><code class="language-vba">Sub GetStockData()
+    Dim url As String
+    Dim xmlHttp As Object
+    Dim response As String
+
+    url = "https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=demo"
+
+    Set xmlHttp = CreateObject("MSXML2.ServerXMLHTTP")
+    xmlHttp.Open "GET", url, False
+    xmlHttp.send
+
+    response = xmlHttp.responseText
+    MsgBox response
+End Sub</code></pre>
+
+        <h4>MATLAB Example</h4>
+        <pre><code class="language-matlab">function data = getStockData(symbol)
+    url = sprintf('https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=%s&apikey=demo', symbol);
+
+    options = weboptions('Timeout', 30);
+    data = webread(url, options);
+
+    disp(data);
+end</code></pre>
+
+        <h4>JSON Response Example</h4>
+        <pre><code class="language-json">{
+    "Meta Data": {
+        "1. Information": "Daily Prices (open, high, low, close) and Volumes",
+        "2. Symbol": "IBM",
+        "3. Last Refreshed": "2023-01-06",
+        "4. Output Size": "Compact",
+        "5. Time Zone": "US/Eastern"
+    },
+    "Time Series (Daily)": {
+        "2023-01-06": {
+            "1. open": "141.1000",
+            "2. high": "143.1700",
+            "3. low": "140.3000",
+            "4. close": "142.4300",
+            "5. volume": "4599019"
+        }
+    }
+}</code></pre>
+
+        <h3>GLOBAL_QUOTE</h3>
+        <p>This API returns the latest price and volume information for a given stock symbol.</p>
+
+        <h4>Python Example</h4>
+        <pre><code>import requests
+import json
+
+def get_quote(symbol, api_key):
+    base_url = "https://www.alphavantage.co/query"
+    params = {
+        "function": "GLOBAL_QUOTE",
+        "symbol": symbol,
+        "apikey": api_key
+    }
+
+    response = requests.get(base_url, params=params)
+
+    if response.status_code == 200:
+        return response.json()
+    else:
+        return {"error": f"API request failed with status {response.status_code}"}
+
+# Example usage
+quote = get_quote("AAPL", "your_api_key")
+print(json.dumps(quote, indent=2))</code></pre>
+    </div>
+</body>
+</html>

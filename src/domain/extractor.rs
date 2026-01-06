@@ -3,7 +3,7 @@
 //! This module implements category and endpoint extraction from parsed HTML documents.
 //! It follows the parse-don't-validate principle and uses structured error handling.
 
-use crate::domain::{ApiCategory, ApiEndpoint, Parameter};
+use crate::domain::{ApiCategory, ApiEndpoint, CodeExample, Parameter};
 use crate::utils::{error::ExtractionResult, error::ContentExtractionError};
 use scraper::{ElementRef, Html, Selector};
 use tracing::{instrument, warn};
@@ -275,11 +275,16 @@ impl<'a> ContentExtractor<'a> {
         let description = self.extract_endpoint_description(h3_element);
         let premium_only = self.detect_premium_endpoint(h3_element);
         let (required_params, optional_params) = self.extract_parameters(h3_element);
+        let python_example = self.extract_code_example(h3_element);
 
-        let endpoint = ApiEndpoint::new(function_name, description)
+        let mut endpoint = ApiEndpoint::new(function_name, description)
             .set_premium(premium_only)
             .with_required_params(required_params)
             .with_optional_params(optional_params);
+
+        if let Some(example) = python_example {
+            endpoint = endpoint.with_python_example(example);
+        }
 
         Ok(endpoint)
     }
@@ -618,6 +623,231 @@ impl<'a> ContentExtractor<'a> {
 
         // Default: assume required (most API parameters are required)
         true
+    }
+
+    /// Extract Python code example from content following an h3 element.
+    ///
+    /// This method looks for <pre> or <code> blocks after an h3 endpoint heading,
+    /// verifies they contain Python code, and returns a cleaned CodeExample.
+    ///
+    /// # Arguments
+    /// * `h3_element` - The h3 element representing the endpoint
+    ///
+    /// # Returns
+    /// A Python CodeExample if found and valid, None otherwise
+    #[instrument(skip(self, h3_element))]
+    pub fn extract_code_example(&self, h3_element: ElementRef) -> Option<CodeExample> {
+        let mut current = h3_element.next_sibling();
+
+        // Traverse siblings looking for code blocks
+        while let Some(sibling) = current {
+            if let Some(element) = sibling.value().as_element() {
+                // Stop if we hit another heading
+                if element.name() == "h2" || element.name() == "h3" {
+                    break;
+                }
+
+                // Check for <pre> or <code> elements
+                if element.name() == "pre" || element.name() == "code" {
+                    let code_element = ElementRef::wrap(sibling).unwrap();
+                    let raw_code = crate::domain::parser::extract_text(&code_element);
+
+                    // Check if this looks like Python code
+                    if self.is_python_code(&raw_code) {
+                        let cleaned_code = self.clean_code_block(&raw_code);
+                        return Some(CodeExample::python(cleaned_code));
+                    }
+                }
+            }
+
+            current = sibling.next_sibling();
+        }
+
+        None
+    }
+
+    /// Determine if the given code text appears to be Python code.
+    ///
+    /// This method checks for Python-specific keywords and patterns to distinguish
+    /// Python code from other languages like R, VBA, MATLAB, or JSON responses.
+    ///
+    /// # Arguments
+    /// * `code_text` - The raw code text to analyze
+    ///
+    /// # Returns
+    /// True if the code appears to be Python, false otherwise
+    #[instrument(skip(self))]
+    fn is_python_code(&self, code_text: &str) -> bool {
+        let text = code_text.to_lowercase();
+
+        // Exclude other languages first
+        if text.contains("<-") || text.contains("library(") || text.contains("data.frame") {
+            return false; // R code
+        }
+        if text.contains("sub ") || text.contains("end sub") || text.contains("worksheets") {
+            return false; // Excel VBA
+        }
+        if text.contains("function [") || text.contains("end;") || text.starts_with('%') {
+            return false; // MATLAB
+        }
+        if text.trim().starts_with('{') && text.trim().ends_with('}') {
+            return false; // JSON response
+        }
+
+        // Check for Python keywords and patterns
+        let python_keywords = [
+            "import", "def", "class", "print", "requests", "pandas", "numpy",
+            "json", "urllib", "os", "sys", "datetime"
+        ];
+
+        let mut python_indicators = 0;
+
+        // Count Python keywords
+        for keyword in &python_keywords {
+            if text.contains(keyword) {
+                python_indicators += 1;
+            }
+        }
+
+        // Check for Python-specific patterns
+        if text.contains("):") || text.contains("):\n") { // function definitions
+            python_indicators += 1;
+        }
+        if text.contains("if __name__") { // common Python pattern
+            python_indicators += 2;
+        }
+        if text.contains("requests.get(") || text.contains("requests.post(") {
+            python_indicators += 2; // HTTP requests (common in API examples)
+        }
+
+        // Require at least 2 indicators to be considered Python
+        python_indicators >= 2
+    }
+
+    /// Clean a code block by removing HTML entities and formatting artifacts.
+    ///
+    /// # Arguments
+    /// * `code` - The raw code text to clean
+    ///
+    /// # Returns
+    /// The cleaned code text
+    #[instrument(skip(self))]
+    fn clean_code_block(&self, code: &str) -> String {
+        let mut cleaned = code.to_string();
+
+        // Replace common HTML entities
+        cleaned = cleaned.replace("&lt;", "<");
+        cleaned = cleaned.replace("&gt;", ">");
+        cleaned = cleaned.replace("&amp;", "&");
+        cleaned = cleaned.replace("&quot;", "\"");
+        cleaned = cleaned.replace("&#39;", "'");
+        cleaned = cleaned.replace("&nbsp;", " ");
+
+        // Remove syntax highlighting artifacts (common in code blocks)
+        // Remove line numbers like "1  ", "2  ", etc.
+        let line_number_pattern = Regex::new(r"^\d+\s+").unwrap();
+        cleaned = cleaned
+            .lines()
+            .map(|line| line_number_pattern.replace(line, "").to_string())
+            .collect::<Vec<String>>()
+            .join("\n");
+
+        // Normalize line endings
+        cleaned = cleaned.replace("\r\n", "\n").replace('\r', "\n");
+
+        // Trim leading/trailing whitespace while preserving internal indentation
+        cleaned = cleaned.trim().to_string();
+
+        cleaned
+    }
+
+    /// Deduplicate a vector of code examples by removing exact duplicates and near-duplicates.
+    ///
+    /// # Arguments
+    /// * `examples` - Vector of code examples to deduplicate
+    ///
+    /// # Returns
+    /// A deduplicated vector with duplicates removed
+    #[instrument(skip(self))]
+    pub fn deduplicate_code_examples(&self, examples: Vec<CodeExample>) -> Vec<CodeExample> {
+        let mut unique_examples: Vec<CodeExample> = Vec::new();
+        let mut seen_hashes = std::collections::HashSet::new();
+
+        for example in examples {
+            // Simple hash-based deduplication (exact duplicates)
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+
+            let mut hasher = DefaultHasher::new();
+            example.code.hash(&mut hasher);
+            let hash = hasher.finish();
+
+            if seen_hashes.contains(&hash) {
+                continue; // Skip exact duplicate
+            }
+
+            // Check for near-duplicates (simple similarity check)
+            let mut is_near_duplicate = false;
+            for unique in &unique_examples {
+                if self.code_similarity(&example.code, &unique.code) > 0.95 {
+                    is_near_duplicate = true;
+                    break;
+                }
+            }
+
+            if !is_near_duplicate {
+                seen_hashes.insert(hash);
+                unique_examples.push(example);
+            }
+        }
+
+        unique_examples
+    }
+
+    /// Calculate similarity between two code strings (0.0 to 1.0).
+    ///
+    /// This is a simple implementation that compares normalized code.
+    /// In production, you might want a more sophisticated diff algorithm.
+    ///
+    /// # Arguments
+    /// * `code1` - First code string
+    /// * `code2` - Second code string
+    ///
+    /// # Returns
+    /// Similarity score between 0.0 and 1.0
+    fn code_similarity(&self, code1: &str, code2: &str) -> f64 {
+        let normalized1 = self.normalize_code_for_comparison(code1);
+        let normalized2 = self.normalize_code_for_comparison(code2);
+
+        if normalized1 == normalized2 {
+            return 1.0; // Exact match after normalization
+        }
+
+        // Simple character-based similarity
+        let longer = normalized1.len().max(normalized2.len());
+        if longer == 0 {
+            return 1.0;
+        }
+
+        let shorter = normalized1.len().min(normalized2.len());
+        (shorter as f64) / (longer as f64)
+    }
+
+    /// Normalize code for similarity comparison by removing whitespace differences.
+    ///
+    /// # Arguments
+    /// * `code` - Code to normalize
+    ///
+    /// # Returns
+    /// Normalized code string
+    fn normalize_code_for_comparison(&self, code: &str) -> String {
+        code
+            .lines()
+            .map(|line| line.trim())
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<&str>>()
+            .join("\n")
+            .to_lowercase()
     }
 }
 
@@ -1334,5 +1564,160 @@ mod tests {
         assert_eq!(endpoint.optional_params.len(), 0);
         assert_eq!(endpoint.required_params[0].name, "function");
         assert_eq!(endpoint.required_params[1].name, "symbol");
+    }
+
+    #[test]
+    fn test_is_python_code_python() {
+        let html = Html::parse_fragment("");
+        let extractor = ContentExtractor::new(&html);
+
+        assert!(extractor.is_python_code("import requests\nresponse = requests.get(url)"));
+        assert!(extractor.is_python_code("def get_data():\n    return requests.get('api')"));
+        assert!(extractor.is_python_code("import pandas as pd\ndf = pd.DataFrame(data)"));
+        assert!(extractor.is_python_code("if __name__ == '__main__':\n    main()"));
+    }
+
+    #[test]
+    fn test_is_python_code_not_python() {
+        let html = Html::parse_fragment("");
+        let extractor = ContentExtractor::new(&html);
+
+        // R code
+        assert!(!extractor.is_python_code("library(httr)\ndata <- GET(url)"));
+        assert!(!extractor.is_python_code("df <- data.frame(x = 1:10)"));
+
+        // VBA code
+        assert!(!extractor.is_python_code("Sub GetData()\n    Worksheets(1).Range(\"A1\") = \"data\"\nEnd Sub"));
+
+        // MATLAB code
+        assert!(!extractor.is_python_code("function [output] = getData(input)\n    output = input * 2;\nend"));
+
+        // JSON
+        assert!(!extractor.is_python_code("{\n    \"key\": \"value\",\n    \"data\": [1, 2, 3]\n}"));
+
+        // Random text
+        assert!(!extractor.is_python_code("This is just some random text without any code."));
+    }
+
+    #[test]
+    fn test_clean_code_block() {
+        let html = Html::parse_fragment("");
+        let extractor = ContentExtractor::new(&html);
+
+        let dirty_code = "1  import requests\n2  response = requests.get(&quot;url&quot;)\n3  print(response.text)";
+        let clean_code = extractor.clean_code_block(dirty_code);
+
+        assert_eq!(clean_code, "import requests\nresponse = requests.get(\"url\")\nprint(response.text)");
+    }
+
+    #[test]
+    fn test_extract_code_example_found() {
+        let html = r#"
+            <h3>TIME_SERIES_DAILY</h3>
+            <p>Description</p>
+            <pre><code>import requests
+response = requests.get(url)
+print(response.json())</code></pre>
+        "#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let example = extractor.extract_code_example(h3);
+
+        assert!(example.is_some());
+        let example = example.unwrap();
+        assert_eq!(example.language, "python");
+        assert!(example.code.contains("import requests"));
+    }
+
+    #[test]
+    fn test_extract_code_example_not_python() {
+        let html = r#"
+            <h3>TIME_SERIES_DAILY</h3>
+            <p>Description</p>
+            <pre><code>library(httr)
+response <- GET(url)
+print(content(response))</code></pre>
+        "#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let example = extractor.extract_code_example(h3);
+
+        assert!(example.is_none());
+    }
+
+    #[test]
+    fn test_extract_code_example_no_code() {
+        let html = r#"<h3>TIME_SERIES_DAILY</h3><p>Description only</p>"#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let example = extractor.extract_code_example(h3);
+
+        assert!(example.is_none());
+    }
+
+    #[test]
+    fn test_deduplicate_code_examples() {
+        let html = Html::parse_fragment("");
+        let extractor = ContentExtractor::new(&html);
+
+        let examples = vec![
+            CodeExample::python("import requests\nprint('hello')".to_string()),
+            CodeExample::python("import requests\nprint('hello')".to_string()), // duplicate
+            CodeExample::python("import pandas\nprint('world')".to_string()),
+        ];
+
+        let deduplicated = extractor.deduplicate_code_examples(examples);
+        assert_eq!(deduplicated.len(), 2);
+        assert!(deduplicated.iter().any(|e| e.code.contains("pandas")));
+        assert!(deduplicated.iter().any(|e| e.code.contains("requests")));
+    }
+
+    #[test]
+    fn test_parse_endpoint_with_code_example() {
+        let html = r#"
+            <h3>TIME_SERIES_DAILY</h3>
+            <p>This endpoint returns daily time series data.</p>
+            <table>
+                <tr><th>Name</th><th>Type</th><th>Description</th></tr>
+                <tr><td>function</td><td>string</td><td>API function</td></tr>
+            </table>
+            <pre><code>import requests
+response = requests.get(url)
+data = response.json()</code></pre>
+        "#;
+        let document = Html::parse_fragment(html);
+        let extractor = ContentExtractor::new(&document);
+
+        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let result = extractor.parse_endpoint(h3);
+
+        assert!(result.is_ok());
+        let endpoint = result.unwrap();
+        assert_eq!(endpoint.function_name, "TIME_SERIES_DAILY");
+        assert!(endpoint.python_example.is_some());
+        let example = endpoint.python_example.unwrap();
+        assert_eq!(example.language, "python");
+        assert!(example.code.contains("import requests"));
+    }
+
+    #[test]
+    fn test_code_similarity() {
+        let html = Html::parse_fragment("");
+        let extractor = ContentExtractor::new(&html);
+
+        // Exact match
+        assert_eq!(extractor.code_similarity("import requests", "import requests"), 1.0);
+
+        // Similar but not exact
+        assert!(extractor.code_similarity("import requests", "import pandas") < 1.0);
+
+        // Empty strings
+        assert_eq!(extractor.code_similarity("", ""), 1.0);
     }
 }

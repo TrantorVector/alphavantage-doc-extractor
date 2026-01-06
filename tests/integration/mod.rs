@@ -4,6 +4,7 @@
 //! external dependencies and data sources.
 
 mod category_extraction_test;
+mod code_extraction_test;
 mod content_identification_test;
 mod endpoint_extraction_test;
 mod html_cleaning_test;
