@@ -4,17 +4,18 @@
 //! It follows the parse-don't-validate principle and uses structured error handling.
 
 use crate::domain::{ApiCategory, ApiEndpoint, CodeExample, Parameter};
-use crate::utils::{error::ExtractionResult, error::ContentExtractionError};
+use crate::utils::{error::ContentExtractionError, error::ExtractionResult};
+use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
 use tracing::{instrument, warn};
-use regex::Regex;
 
 /// Content extractor for Alpha Vantage documentation pages.
 ///
 /// This struct holds a reference to the parsed HTML document and provides
 /// methods to extract categories and endpoints from the main content area.
 pub struct ContentExtractor<'a> {
-    /// Reference to the parsed HTML document
+    /// Reference to the parsed HTML document (reserved for future use)
+    #[allow(dead_code)]
     document: &'a Html,
 }
 
@@ -42,7 +43,10 @@ impl<'a> ContentExtractor<'a> {
     /// # Returns
     /// A vector of successfully extracted categories, or an error if no categories found
     #[instrument(skip(self, main_content), fields(request_id = %uuid::Uuid::new_v4()))]
-    pub fn extract_categories(&self, main_content: ElementRef) -> ExtractionResult<Vec<ApiCategory>> {
+    pub fn extract_categories(
+        &self,
+        main_content: ElementRef,
+    ) -> ExtractionResult<Vec<ApiCategory>> {
         let h2_selector = Selector::parse("h2").map_err(|e| {
             ContentExtractionError::CategoryExtractionFailed(
                 "selector".to_string(),
@@ -150,14 +154,13 @@ impl<'a> ContentExtractor<'a> {
         // Keep only alphanumeric, spaces, parentheses, and underscores
         let filtered: String = name
             .chars()
-            .filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '(' || *c == ')' || *c == '_')
+            .filter(|c| {
+                c.is_alphanumeric() || c.is_whitespace() || *c == '(' || *c == ')' || *c == '_'
+            })
             .collect();
 
         // Collapse multiple spaces and trim
-        filtered
-            .split_whitespace()
-            .collect::<Vec<&str>>()
-            .join(" ")
+        filtered.split_whitespace().collect::<Vec<&str>>().join(" ")
     }
 
     /// Extract the category description from content following an h2 element.
@@ -281,7 +284,8 @@ impl<'a> ContentExtractor<'a> {
         let all_params = [&required_params[..], &optional_params[..]].concat();
 
         // Extract or construct request pattern
-        let request_pattern = self.extract_request_pattern(h3_element, Some(&function_name), Some(&all_params));
+        let request_pattern =
+            self.extract_request_pattern(h3_element, Some(&function_name), Some(&all_params));
 
         let mut endpoint = ApiEndpoint::new(function_name, description)
             .set_premium(premium_only)
@@ -313,11 +317,12 @@ impl<'a> ContentExtractor<'a> {
 
         // Regex pattern for uppercase function names: [A-Z][A-Z_]*[A-Z]
         // This matches patterns like TIME_SERIES_DAILY, OVERVIEW, etc.
-        let function_pattern = Regex::new(r"[A-Z][A-Z_]*[A-Z]")
-            .map_err(|e| ContentExtractionError::CategoryExtractionFailed(
+        let function_pattern = Regex::new(r"[A-Z][A-Z_]*[A-Z]").map_err(|e| {
+            ContentExtractionError::CategoryExtractionFailed(
                 "regex_compilation".to_string(),
                 format!("Failed to compile function name regex: {}", e),
-            ))?;
+            )
+        })?;
 
         if let Some(captures) = function_pattern.find(&h3_text) {
             let function_name = captures.as_str().to_string();
@@ -328,7 +333,10 @@ impl<'a> ContentExtractor<'a> {
             } else {
                 Err(ContentExtractionError::CategoryExtractionFailed(
                     "invalid_function_format".to_string(),
-                    format!("Function name '{}' contains invalid characters", function_name),
+                    format!(
+                        "Function name '{}' contains invalid characters",
+                        function_name
+                    ),
                 ))
             }
         } else {
@@ -408,7 +416,10 @@ impl<'a> ContentExtractor<'a> {
         let h3_text = extract_text(&h3_element).to_lowercase();
 
         // Check h3 text for premium indicators
-        if h3_text.contains("premium") || h3_text.contains("paid") || h3_text.contains("subscription") {
+        if h3_text.contains("premium")
+            || h3_text.contains("paid")
+            || h3_text.contains("subscription")
+        {
             return true;
         }
 
@@ -417,14 +428,18 @@ impl<'a> ContentExtractor<'a> {
         let mut check_count = 0;
 
         while let Some(sibling) = current {
-            if check_count >= 3 { // Only check next 3 elements
+            if check_count >= 3 {
+                // Only check next 3 elements
                 break;
             }
 
             if let Some(element) = sibling.value().as_element() {
                 if element.name() == "p" {
                     let text = extract_text(&ElementRef::wrap(sibling).unwrap()).to_lowercase();
-                    if text.contains("premium") || text.contains("paid") || text.contains("subscription") {
+                    if text.contains("premium")
+                        || text.contains("paid")
+                        || text.contains("subscription")
+                    {
                         return true;
                     }
                 } else if element.name() == "h2" || element.name() == "h3" {
@@ -470,7 +485,9 @@ impl<'a> ContentExtractor<'a> {
 
                     // Separate into required and optional
                     for param in parameters {
-                        if self.is_required_parameter(ElementRef::wrap(sibling).unwrap(), &param.name) {
+                        if self
+                            .is_required_parameter(ElementRef::wrap(sibling).unwrap(), &param.name)
+                        {
                             required_params.push(param);
                         } else {
                             optional_params.push(param);
@@ -552,7 +569,10 @@ impl<'a> ContentExtractor<'a> {
         // Optional: default value (column 4)
         if cells.len() > 3 {
             let default_text = extract_text(&cells[3]).trim().to_string();
-            if !default_text.is_empty() && default_text != "-" && default_text.to_lowercase() != "none" {
+            if !default_text.is_empty()
+                && default_text != "-"
+                && default_text.to_lowercase() != "none"
+            {
                 param = param.with_default(default_text);
             }
         }
@@ -703,8 +723,8 @@ impl<'a> ContentExtractor<'a> {
 
         // Check for Python keywords and patterns
         let python_keywords = [
-            "import", "def", "class", "print", "requests", "pandas", "numpy",
-            "json", "urllib", "os", "sys", "datetime"
+            "import", "def", "class", "print", "requests", "pandas", "numpy", "json", "urllib",
+            "os", "sys", "datetime",
         ];
 
         let mut python_indicators = 0;
@@ -717,10 +737,12 @@ impl<'a> ContentExtractor<'a> {
         }
 
         // Check for Python-specific patterns
-        if text.contains("):") || text.contains("):\n") { // function definitions
+        if text.contains("):") || text.contains("):\n") {
+            // function definitions
             python_indicators += 1;
         }
-        if text.contains("if __name__") { // common Python pattern
+        if text.contains("if __name__") {
+            // common Python pattern
             python_indicators += 2;
         }
         if text.contains("requests.get(") || text.contains("requests.post(") {
@@ -848,8 +870,7 @@ impl<'a> ContentExtractor<'a> {
     /// # Returns
     /// Normalized code string
     fn normalize_code_for_comparison(&self, code: &str) -> String {
-        code
-            .lines()
+        code.lines()
             .map(|line| line.trim())
             .filter(|line| !line.is_empty())
             .collect::<Vec<&str>>()
@@ -870,7 +891,12 @@ impl<'a> ContentExtractor<'a> {
     /// # Returns
     /// A URL pattern string for the API request
     #[instrument(skip(self, h3_element, params))]
-    pub fn extract_request_pattern(&self, h3_element: ElementRef, function_name: Option<&str>, params: Option<&[Parameter]>) -> String {
+    pub fn extract_request_pattern(
+        &self,
+        h3_element: ElementRef,
+        function_name: Option<&str>,
+        params: Option<&[Parameter]>,
+    ) -> String {
         // First try to find an actual URL pattern in the documentation
         if let Some(pattern) = self.find_url_pattern(h3_element) {
             return pattern;
@@ -899,8 +925,7 @@ impl<'a> ContentExtractor<'a> {
         use crate::domain::parser::extract_text;
 
         // Regex pattern for Alpha Vantage URLs
-        let url_pattern = Regex::new(r"https?://www\.alphavantage\.co/query\?[^\s<>]+")
-            .ok()?;
+        let url_pattern = Regex::new(r"https?://www\.alphavantage\.co/query\?[^\s<>]+").ok()?;
 
         let mut current = h3_element.next_sibling();
 
@@ -949,7 +974,11 @@ impl<'a> ContentExtractor<'a> {
     /// # Returns
     /// A constructed URL pattern string
     #[instrument(skip(self))]
-    pub fn construct_pattern_from_endpoint(&self, function_name: &str, params: &[Parameter]) -> String {
+    pub fn construct_pattern_from_endpoint(
+        &self,
+        function_name: &str,
+        params: &[Parameter],
+    ) -> String {
         let url = "https://www.alphavantage.co/query?".to_string();
         let mut query_parts = Vec::new();
 
@@ -1010,10 +1039,7 @@ mod tests {
             "SpecialChars"
         );
 
-        assert_eq!(
-            extractor.normalize_category_name("   "),
-            ""
-        );
+        assert_eq!(extractor.normalize_category_name("   "), "");
     }
 
     #[test]
@@ -1022,7 +1048,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h2 = document.select(&Selector::parse("h2").unwrap()).next().unwrap();
+        let h2 = document
+            .select(&Selector::parse("h2").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_category_name(h2);
 
         assert!(result.is_ok());
@@ -1035,7 +1064,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h2 = document.select(&Selector::parse("h2").unwrap()).next().unwrap();
+        let h2 = document
+            .select(&Selector::parse("h2").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_category_name(h2);
 
         assert!(result.is_err());
@@ -1050,11 +1082,17 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h2 = document.select(&Selector::parse("h2").unwrap()).next().unwrap();
+        let h2 = document
+            .select(&Selector::parse("h2").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_category_description(h2);
 
         assert!(result.is_some());
-        assert_eq!(result.unwrap(), "This is a description of time series data.");
+        assert_eq!(
+            result.unwrap(),
+            "This is a description of time series data."
+        );
     }
 
     #[test]
@@ -1067,7 +1105,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h2 = document.select(&Selector::parse("h2").unwrap()).next().unwrap();
+        let h2 = document
+            .select(&Selector::parse("h2").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_category_description(h2);
 
         assert!(result.is_some());
@@ -1084,11 +1125,17 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h2 = document.select(&Selector::parse("h2").unwrap()).next().unwrap();
+        let h2 = document
+            .select(&Selector::parse("h2").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_category_description(h2);
 
         assert!(result.is_some());
-        assert_eq!(result.unwrap(), "This is the real description with enough length.");
+        assert_eq!(
+            result.unwrap(),
+            "This is the real description with enough length."
+        );
     }
 
     #[test]
@@ -1102,7 +1149,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h2 = document.select(&Selector::parse("h2").unwrap()).next().unwrap();
+        let h2 = document
+            .select(&Selector::parse("h2").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_category_description(h2);
 
         assert!(result.is_some());
@@ -1115,7 +1165,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h2 = document.select(&Selector::parse("h2").unwrap()).next().unwrap();
+        let h2 = document
+            .select(&Selector::parse("h2").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_category_description(h2);
 
         assert!(result.is_none());
@@ -1130,7 +1183,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h2 = document.select(&Selector::parse("h2").unwrap()).next().unwrap();
+        let h2 = document
+            .select(&Selector::parse("h2").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.parse_category(h2);
 
         assert!(result.is_ok());
@@ -1149,7 +1205,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h2 = document.select(&Selector::parse("h2").unwrap()).next().unwrap();
+        let h2 = document
+            .select(&Selector::parse("h2").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.parse_category(h2);
 
         assert!(result.is_ok());
@@ -1165,7 +1224,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_function_name(h3);
 
         assert!(result.is_ok());
@@ -1178,7 +1240,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_function_name(h3);
 
         assert!(result.is_ok());
@@ -1191,7 +1256,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_function_name(h3);
 
         assert!(result.is_err());
@@ -1203,7 +1271,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_function_name(h3);
 
         assert!(result.is_err());
@@ -1218,10 +1289,16 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_endpoint_description(h3);
 
-        assert_eq!(result, "This endpoint returns daily time series data for stocks.");
+        assert_eq!(
+            result,
+            "This endpoint returns daily time series data for stocks."
+        );
     }
 
     #[test]
@@ -1234,7 +1311,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_endpoint_description(h3);
 
         assert_eq!(result, "This is the real description.");
@@ -1246,7 +1326,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_endpoint_description(h3);
 
         assert_eq!(result, "No description available");
@@ -1258,7 +1341,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.detect_premium_endpoint(h3);
 
         assert!(result);
@@ -1273,7 +1359,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.detect_premium_endpoint(h3);
 
         assert!(result);
@@ -1285,7 +1374,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.detect_premium_endpoint(h3);
 
         assert!(!result);
@@ -1300,13 +1392,19 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.parse_endpoint(h3);
 
         assert!(result.is_ok());
         let endpoint = result.unwrap();
         assert_eq!(endpoint.function_name, "TIME_SERIES_DAILY");
-        assert_eq!(endpoint.description, "This endpoint returns daily time series data.");
+        assert_eq!(
+            endpoint.description,
+            "This endpoint returns daily time series data."
+        );
         assert!(!endpoint.premium_only);
     }
 
@@ -1319,7 +1417,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.parse_endpoint(h3);
 
         assert!(result.is_ok());
@@ -1339,7 +1440,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h2 = document.select(&Selector::parse("h2").unwrap()).next().unwrap();
+        let h2 = document
+            .select(&Selector::parse("h2").unwrap())
+            .next()
+            .unwrap();
         let endpoints = extractor.extract_endpoints(h2);
 
         assert_eq!(endpoints.len(), 1);
@@ -1359,7 +1463,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h2 = document.select(&Selector::parse("h2").unwrap()).next().unwrap();
+        let h2 = document
+            .select(&Selector::parse("h2").unwrap())
+            .next()
+            .unwrap();
         let endpoints = extractor.extract_endpoints(h2);
 
         assert_eq!(endpoints.len(), 2);
@@ -1380,7 +1487,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h2 = document.select(&Selector::parse("h2").unwrap()).next().unwrap();
+        let h2 = document
+            .select(&Selector::parse("h2").unwrap())
+            .next()
+            .unwrap();
         let endpoints = extractor.extract_endpoints(h2);
 
         assert_eq!(endpoints.len(), 1);
@@ -1400,13 +1510,19 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h2 = document.select(&Selector::parse("h2").unwrap()).next().unwrap();
+        let h2 = document
+            .select(&Selector::parse("h2").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.parse_category(h2);
 
         assert!(result.is_ok());
         let category = result.unwrap();
         assert_eq!(category.name, "Time Series Data");
-        assert_eq!(category.description, Some("Time series category description.".to_string()));
+        assert_eq!(
+            category.description,
+            Some("Time series category description.".to_string())
+        );
         assert_eq!(category.endpoints.len(), 2);
         assert_eq!(category.endpoints[0].function_name, "TIME_SERIES_DAILY");
         assert_eq!(category.endpoints[1].function_name, "TIME_SERIES_INTRADAY");
@@ -1425,7 +1541,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let main = document.select(&Selector::parse("#main").unwrap()).next().unwrap();
+        let main = document
+            .select(&Selector::parse("#main").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_categories(main);
 
         assert!(result.is_ok());
@@ -1441,7 +1560,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let main = document.select(&Selector::parse("#main").unwrap()).next().unwrap();
+        let main = document
+            .select(&Selector::parse("#main").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_categories(main);
 
         assert!(result.is_err());
@@ -1453,7 +1575,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let main = document.select(&Selector::parse("#main").unwrap()).next().unwrap();
+        let main = document
+            .select(&Selector::parse("#main").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.extract_categories(main);
 
         assert!(result.is_err());
@@ -1473,7 +1598,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let row = document.select(&Selector::parse("tr").unwrap()).next().unwrap();
+        let row = document
+            .select(&Selector::parse("tr").unwrap())
+            .next()
+            .unwrap();
         let param = extractor.parse_parameter_from_row(row);
 
         assert!(param.is_some());
@@ -1500,7 +1628,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let row = document.select(&Selector::parse("tr").unwrap()).next().unwrap();
+        let row = document
+            .select(&Selector::parse("tr").unwrap())
+            .next()
+            .unwrap();
         let param = extractor.parse_parameter_from_row(row);
 
         assert!(param.is_some());
@@ -1525,7 +1656,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let row = document.select(&Selector::parse("tr").unwrap()).next().unwrap();
+        let row = document
+            .select(&Selector::parse("tr").unwrap())
+            .next()
+            .unwrap();
         let param = extractor.parse_parameter_from_row(row);
 
         assert!(param.is_some());
@@ -1547,7 +1681,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let row = document.select(&Selector::parse("tr").unwrap()).next().unwrap();
+        let row = document
+            .select(&Selector::parse("tr").unwrap())
+            .next()
+            .unwrap();
         let param = extractor.parse_parameter_from_row(row);
 
         assert!(param.is_none());
@@ -1567,7 +1704,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let row = document.select(&Selector::parse("tr").unwrap()).next().unwrap();
+        let row = document
+            .select(&Selector::parse("tr").unwrap())
+            .next()
+            .unwrap();
         let param = extractor.parse_parameter_from_row(row);
 
         assert!(param.is_none());
@@ -1606,7 +1746,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let table = document.select(&Selector::parse("table").unwrap()).next().unwrap();
+        let table = document
+            .select(&Selector::parse("table").unwrap())
+            .next()
+            .unwrap();
         assert!(extractor.is_required_parameter(table, "function"));
         assert!(extractor.is_required_parameter(table, "apikey"));
         assert!(extractor.is_required_parameter(table, "symbol"));
@@ -1618,7 +1761,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let table = document.select(&Selector::parse("table").unwrap()).next().unwrap();
+        let table = document
+            .select(&Selector::parse("table").unwrap())
+            .next()
+            .unwrap();
         // For now, default is required - in practice this would be more sophisticated
         assert!(extractor.is_required_parameter(table, "outputsize"));
     }
@@ -1635,7 +1781,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let table = document.select(&Selector::parse("table").unwrap()).next().unwrap();
+        let table = document
+            .select(&Selector::parse("table").unwrap())
+            .next()
+            .unwrap();
         let params = extractor.parse_parameter_table(table);
 
         assert_eq!(params.len(), 2);
@@ -1658,7 +1807,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let (required, optional) = extractor.extract_parameters(h3);
 
         // All parameters are currently treated as required by default
@@ -1683,7 +1835,10 @@ mod tests {
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.parse_endpoint(h3);
 
         assert!(result.is_ok());
@@ -1716,10 +1871,12 @@ mod tests {
         assert!(!extractor.is_python_code("df <- data.frame(x = 1:10)"));
 
         // VBA code
-        assert!(!extractor.is_python_code("Sub GetData()\n    Worksheets(1).Range(\"A1\") = \"data\"\nEnd Sub"));
+        assert!(!extractor
+            .is_python_code("Sub GetData()\n    Worksheets(1).Range(\"A1\") = \"data\"\nEnd Sub"));
 
         // MATLAB code
-        assert!(!extractor.is_python_code("function [output] = getData(input)\n    output = input * 2;\nend"));
+        assert!(!extractor
+            .is_python_code("function [output] = getData(input)\n    output = input * 2;\nend"));
 
         // JSON
         assert!(!extractor.is_python_code("{\n    \"key\": \"value\",\n    \"data\": [1, 2, 3]\n}"));
@@ -1736,7 +1893,10 @@ mod tests {
         let dirty_code = "1  import requests\n2  response = requests.get(&quot;url&quot;)\n3  print(response.text)";
         let clean_code = extractor.clean_code_block(dirty_code);
 
-        assert_eq!(clean_code, "import requests\nresponse = requests.get(\"url\")\nprint(response.text)");
+        assert_eq!(
+            clean_code,
+            "import requests\nresponse = requests.get(\"url\")\nprint(response.text)"
+        );
     }
 
     #[test]
@@ -1751,7 +1911,10 @@ print(response.json())</code></pre>
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let example = extractor.extract_code_example(h3);
 
         assert!(example.is_some());
@@ -1772,7 +1935,10 @@ print(content(response))</code></pre>
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let example = extractor.extract_code_example(h3);
 
         assert!(example.is_none());
@@ -1784,7 +1950,10 @@ print(content(response))</code></pre>
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let example = extractor.extract_code_example(h3);
 
         assert!(example.is_none());
@@ -1823,7 +1992,10 @@ data = response.json()</code></pre>
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let result = extractor.parse_endpoint(h3);
 
         assert!(result.is_ok());
@@ -1841,7 +2013,10 @@ data = response.json()</code></pre>
         let extractor = ContentExtractor::new(&html);
 
         // Exact match
-        assert_eq!(extractor.code_similarity("import requests", "import requests"), 1.0);
+        assert_eq!(
+            extractor.code_similarity("import requests", "import requests"),
+            1.0
+        );
 
         // Similar but not exact
         assert!(extractor.code_similarity("import requests", "import pandas") < 1.0);
@@ -1856,7 +2031,10 @@ data = response.json()</code></pre>
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let pattern = extractor.extract_request_pattern(h3, None, None);
 
         // Should return base URL when no pattern found
@@ -1872,11 +2050,17 @@ data = response.json()</code></pre>
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let pattern = extractor.find_url_pattern(h3);
 
         assert!(pattern.is_some());
-        assert_eq!(pattern.unwrap(), "https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=demo");
+        assert_eq!(
+            pattern.unwrap(),
+            "https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=demo"
+        );
     }
 
     #[test]
@@ -1885,7 +2069,10 @@ data = response.json()</code></pre>
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h3 = document.select(&Selector::parse("h3").unwrap()).next().unwrap();
+        let h3 = document
+            .select(&Selector::parse("h3").unwrap())
+            .next()
+            .unwrap();
         let pattern = extractor.find_url_pattern(h3);
 
         assert!(pattern.is_none());
@@ -1897,8 +2084,16 @@ data = response.json()</code></pre>
         let extractor = ContentExtractor::new(&html);
 
         let params = vec![
-            Parameter::new("function".to_string(), "string".to_string(), "API function".to_string()),
-            Parameter::new("symbol".to_string(), "string".to_string(), "Stock symbol".to_string()),
+            Parameter::new(
+                "function".to_string(),
+                "string".to_string(),
+                "API function".to_string(),
+            ),
+            Parameter::new(
+                "symbol".to_string(),
+                "string".to_string(),
+                "Stock symbol".to_string(),
+            ),
         ];
 
         let pattern = extractor.construct_pattern_from_endpoint("TIME_SERIES_DAILY", &params);
@@ -1917,9 +2112,21 @@ data = response.json()</code></pre>
         let extractor = ContentExtractor::new(&html);
 
         let params = vec![
-            Parameter::new("function".to_string(), "string".to_string(), "API function".to_string()),
-            Parameter::new("symbol".to_string(), "string".to_string(), "Stock symbol".to_string()),
-            Parameter::new("outputsize".to_string(), "string".to_string(), "Output size".to_string()),
+            Parameter::new(
+                "function".to_string(),
+                "string".to_string(),
+                "API function".to_string(),
+            ),
+            Parameter::new(
+                "symbol".to_string(),
+                "string".to_string(),
+                "Stock symbol".to_string(),
+            ),
+            Parameter::new(
+                "outputsize".to_string(),
+                "string".to_string(),
+                "Output size".to_string(),
+            ),
         ];
 
         let pattern = extractor.construct_pattern_from_endpoint("TIME_SERIES_DAILY", &params);
