@@ -1,0 +1,27 @@
+# Alpha Vantage Doc Extractor - Cursor Rules
+
+## Architecture & Patterns
+- **Hexagonal Architecture**: STRICTLY enforce separation. `domain/` must NEVER import from `adapters/`, `ports/`, or external crates (except serde/thiserror).
+- **Type-State Pattern**: Do NOT use boolean flags for state. Use distinct types (e.g., `Url<Validated>` vs `Url<Raw>`).
+- **Parse, Don't Validate**: Parse inputs immediately into Domain Types.
+
+## Rust Idioms & Safety
+- **NO PANICS**: `unwrap()`, `expect()`, and `panic!()` are FORBIDDEN. Use `Result` and `?` everywhere.
+- **Error Handling**: Use `thiserror` for library errors and `anyhow` for CLI/Main.
+- **Zero-Cost Abstractions**: Prefer `#[repr(transparent)]` newtypes and stack allocation.
+- **Docs-as-Code**: Every public struct/fn must have a rustdoc `///` comment explaining "Why", not just "What".
+
+## Testing Strategy
+- **Unit Tests**: Co-located in the same file `cfg(test)`.
+- **Integration Tests**: In `tests/integration/`.
+- **Property Testing**: Use `proptest` for parsers to ensure they handle random garbage input without crashing.
+- **Snapshot Testing**: Use `insta` for large outputs (Markdown generation).
+
+## Observability
+- **Logging**: Use `tracing`.
+- **Correlation**: Every log line must include `request_id`.
+- **Instrumentation**: Use `#[instrument]` on all major domain functions.
+
+## Business Logic
+- **Golden Master**: Phase 5 output verification is binary. If `insta` snapshot differs, build fails.
+- **Heuristic Validation**: Output must satisfy density checks (>1 endpoint/5KB) before saving.
