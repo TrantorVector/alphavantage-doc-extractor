@@ -4,12 +4,10 @@
 //! operations, including writing markdown content, backup creation, and UTF-8 handling.
 
 use alphavantage_doc_extractor::adapters::FileWriter;
-use alphavantage_doc_extractor::domain::{
-    ApiCategory, ApiEndpoint, DocumentMetadata, DocumentStructure, MarkdownRenderer, Parameter,
-    RawUrl, ValidatedUrl,
-};
-use alphavantage_doc_extractor::ports::Writer;
+use alphavantage_doc_extractor::domain::{ApiCategory, ApiEndpoint, DocumentMetadata, DocumentStructure, MarkdownRenderer, Parameter};
+use alphavantage_doc_extractor::utils::ValidatedUrl;
 use std::fs;
+use std::path::Path;
 use tempfile::TempDir;
 
 /// Test complete integration: generate markdown and write to file
@@ -20,7 +18,7 @@ fn test_write_generated_markdown() {
     let output_path = temp_dir.path().join("api_docs.md");
 
     // Create sample document structure
-    let url = ValidatedUrl::validate(RawUrl::new("https://api.example.com".to_string())).unwrap();
+    let url = ValidatedUrl::validate("https://api.example.com".into()).unwrap();
     let metadata = DocumentMetadata::new("Sample API".to_string(), url).with_counts(1, 1);
 
     let endpoint = ApiEndpoint::new(
@@ -31,10 +29,7 @@ fn test_write_generated_markdown() {
         "api_key".to_string(),
         "string".to_string(),
         "Your API key".to_string(),
-    )])
-    .with_request_pattern(
-        "https://api.example.com/query?function=GET_DATA&apikey={api_key}".to_string(),
-    );
+    )]);
 
     let category = ApiCategory::new("Data Operations".to_string()).add_endpoint(endpoint);
     let document = DocumentStructure::new(metadata, vec![category]);
@@ -93,9 +88,7 @@ fn test_backup_integration() {
 
     // Write initial version
     let initial_content = "# Version 1\n\nInitial content.";
-    writer
-        .write(output_path.to_str().unwrap(), initial_content)
-        .unwrap();
+    writer.write(output_path.to_str().unwrap(), initial_content).unwrap();
 
     // Write updated version with backup
     let updated_content = "# Version 2\n\nUpdated content with new features.";
@@ -143,17 +136,9 @@ fn test_large_content_writing() {
 
     for i in 1..=50 {
         large_content.push_str(&format!("## Endpoint {}\n\n", i));
-        large_content.push_str(&format!(
-            "This is endpoint {} with detailed documentation.\n\n",
-            i
-        ));
-        large_content.push_str(
-            "**Parameters:**\n\n| Name | Type | Description |\n|------|------|-------------|\n",
-        );
-        large_content.push_str(&format!(
-            "| param{} | string | Parameter for endpoint {} |\n\n",
-            i, i
-        ));
+        large_content.push_str(&format!("This is endpoint {} with detailed documentation.\n\n", i));
+        large_content.push_str("**Parameters:**\n\n| Name | Type | Description |\n|------|------|-------------|\n");
+        large_content.push_str(&format!("| param{} | string | Parameter for endpoint {} |\n\n", i, i));
         large_content.push_str(&format!("```http\nGET /api/v1/endpoint/{}\n```\n\n", i));
     }
 
@@ -205,9 +190,7 @@ fn test_file_size_reporting() {
     let content = "# Test\n\nContent of known size.";
     let expected_size = content.len() as u64;
 
-    writer
-        .write(output_path.to_str().unwrap(), content)
-        .unwrap();
+    writer.write(output_path.to_str().unwrap(), content).unwrap();
 
     let size = writer.get_file_size(output_path.to_str().unwrap()).unwrap();
     assert_eq!(size, expected_size);

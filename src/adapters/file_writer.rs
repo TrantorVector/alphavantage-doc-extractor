@@ -40,7 +40,11 @@ impl FileWriter {
     /// # Returns
     /// * `Ok(())` if the write was successful
     /// * `Err(ExtractionError)` if the write failed
-    pub fn write_with_backup(&self, output_path: &str, content: &str) -> Result<(), ExtractionError> {
+    pub fn write_with_backup(
+        &self,
+        output_path: &str,
+        content: &str,
+    ) -> Result<(), ExtractionError> {
         // Create backup if file exists
         if Path::new(output_path).exists() {
             match self.create_backup(output_path) {
@@ -103,10 +107,9 @@ impl FileWriter {
             })?;
 
             if !metadata.is_dir() {
-                return Err(ExtractionError::Render(RenderError::InvalidOutputPath(format!(
-                    "Parent path {} is not a directory",
-                    parent.display()
-                ))));
+                return Err(ExtractionError::Render(RenderError::InvalidOutputPath(
+                    format!("Parent path {} is not a directory", parent.display()),
+                )));
             }
 
             // Check write permissions by trying to create a temporary file
@@ -142,19 +145,12 @@ impl FileWriter {
         let path_obj = Path::new(path);
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
 
-        let file_stem = path_obj.file_stem()
+        let file_stem = path_obj
+            .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("file");
 
-        let extension = path_obj.extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("");
-
-        let backup_filename = if extension.is_empty() {
-            format!("{}.{}.bak", file_stem, timestamp)
-        } else {
-            format!("{}.{}.bak", file_stem, timestamp)
-        };
+        let backup_filename = format!("{}.{}.bak", file_stem, timestamp);
 
         let backup_path = if let Some(parent) = path_obj.parent() {
             parent.join(backup_filename)
