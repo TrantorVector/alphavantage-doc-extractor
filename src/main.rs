@@ -169,10 +169,12 @@ async fn run(config: Config, correlation_id: String) -> Result<(), ExtractionErr
     // Step 8: Render to markdown
     info!(correlation_id = %correlation_id, "Rendering to LLM-optimized markdown");
     let renderer = MarkdownRenderer::new();
-    let markdown = renderer.render(&document_structure).map_err(|e| {
-        error!(correlation_id = %correlation_id, error = %e, "Markdown rendering failed");
-        e
-    })?;
+    let markdown = renderer
+        .render(&document_structure, !config.no_validation)
+        .map_err(|e| {
+            error!(correlation_id = %correlation_id, error = %e, "Markdown rendering failed");
+            e
+        })?;
 
     // Step 9: Validate output (if enabled)
     if !config.no_validation {

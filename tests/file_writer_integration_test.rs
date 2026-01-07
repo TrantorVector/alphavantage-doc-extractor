@@ -41,7 +41,7 @@ fn test_write_generated_markdown() {
 
     // Generate markdown
     let renderer = MarkdownRenderer::new();
-    let markdown = renderer.render(&document).unwrap();
+    let markdown = renderer.render(&document, true).unwrap();
 
     // Write to file
     let result = writer.write(output_path.to_str().unwrap(), &markdown);
