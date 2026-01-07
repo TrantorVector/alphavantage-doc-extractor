@@ -5,3 +5,6 @@
 
 pub mod fetcher;
 pub mod writer;
+
+// Re-export commonly used port traits
+pub use writer::Writer;

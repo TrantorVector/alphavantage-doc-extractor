@@ -7,6 +7,7 @@ mod category_extraction_test;
 mod code_extraction_test;
 mod content_identification_test;
 mod endpoint_extraction_test;
+mod file_writer_test;
 mod html_cleaning_test;
 mod http_integration_test;
 mod parameter_extraction_test;
