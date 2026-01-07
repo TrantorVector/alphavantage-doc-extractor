@@ -1,0 +1,157 @@
+---
+source: tests/end_to_end.rs
+assertion_line: 141
+expression: markdown
+---
+---
+title: "Test API Documentation"
+source: "https://www.alphavantage.co/documentation"
+extracted_at: "2024-01-01T00:00:00Z"
+endpoint_count: 5
+category_count: 3
+format_version: "2.0"
+---
+## Table of Contents
+
+- [Stock Time Series Data](#stock-time-series-data)
+  - [TIME_SERIES_INTRADAY](#time-series-intraday)
+  - [TIME_SERIES_DAILY](#time-series-daily)
+
+- [Fundamental Data](#fundamental-data)
+  - [OVERVIEW](#overview)
+  - [INCOME_STATEMENT](#income-statement)
+
+- [Currency Exchange](#currency-exchange)
+  - [CURRENCY_EXCHANGE_RATE](#currency-exchange-rate)
+# Test API Documentation
+
+**Source:** https://www.alphavantage.co/documentation, **Extracted:** 2024-01-01 00:00 UTC, **Endpoints:** 5, **Categories:** 3
+
+---
+<!-- CATEGORY: Stock Time Series Data -->
+## Stock Time Series Data
+
+This section contains APIs for retrieving stock time series data including intraday, daily, weekly, and monthly prices.
+
+<!-- ENDPOINT: TIME_SERIES_INTRADAY -->
+### TIME_SERIES_INTRADAY
+
+This API returns intraday time series (timestamp, open, high, low, close, volume) of the equity specified.
+<!-- PARAMETERS:REQUIRED -->
+**Required Parameters:**
+
+| Parameter | Type | Description | Default | Options |
+|-----------|------|-------------|---------|---------|
+| function | string | The time series of your choice | - | TIME_SERIES_INTRADAY |
+| symbol | string | The name of the equity of your choice | - | - |
+| interval | string | Time interval between two consecutive data points | 5min | 1min, 5min, 15min, 30min, 60min |
+| apikey | string | Your API key | - | - |
+| outputsize | string | By default, outputsize=compact | compact | compact, full |
+
+
+<!-- CODE:PYTHON -->
+```python
+import requests # replace the "demo" apikey below with your own key from https://www.alphavantage.co/support/#api-key url = 'https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=IBM&interval=5min&apikey=demo' r = requests.get(url) data = r.json() print(data)
+```
+<!-- REQUEST_PATTERN -->
+**API Request Pattern:**
+
+```http
+https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=IBM&interval=5min&apikey=demo'
+```
+
+<!-- ENDPOINT: TIME_SERIES_DAILY -->
+### TIME_SERIES_DAILY `[PREMIUM]`
+
+PREMIUM ENDPOINT: This endpoint requires a premium subscription.
+<!-- PARAMETERS:REQUIRED -->
+**Required Parameters:**
+
+| Parameter | Type | Description | Default | Options |
+|-----------|------|-------------|---------|---------|
+| function | string | The time series of your choice | - | TIME_SERIES_DAILY |
+| symbol | string | The name of the equity of your choice | - | - |
+| outputsize | string | By default, outputsize=compact | compact | compact, full |
+| apikey | string | Your API key | - | - |
+
+<!-- REQUEST_PATTERN -->
+**API Request Pattern:**
+
+```http
+https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=demo'
+```
+
+
+
+<!-- CATEGORY: Fundamental Data -->
+## Fundamental Data
+
+This section contains APIs for retrieving fundamental data including company overview, income statements, balance sheets, and cash flow statements.
+
+<!-- ENDPOINT: OVERVIEW -->
+### OVERVIEW
+
+This API returns the company information, financial ratios, and other key metrics for the equity specified.
+<!-- PARAMETERS:REQUIRED -->
+**Required Parameters:**
+
+| Parameter | Type | Description | Default | Options |
+|-----------|------|-------------|---------|---------|
+| function | string | The function of your choice | - | OVERVIEW |
+| symbol | string | The name of the equity of your choice | - | - |
+| apikey | string | Your API key | - | - |
+
+<!-- REQUEST_PATTERN -->
+**API Request Pattern:**
+
+```http
+https://www.alphavantage.co/query?function=OVERVIEW&symbol=IBM&apikey=demo"
+```
+
+<!-- ENDPOINT: INCOME_STATEMENT -->
+### INCOME_STATEMENT
+
+This API returns the annual and quarterly income statements for the company of interest.
+<!-- PARAMETERS:REQUIRED -->
+**Required Parameters:**
+
+| Parameter | Type | Description | Default | Options |
+|-----------|------|-------------|---------|---------|
+| function | string | The function of your choice | - | INCOME_STATEMENT |
+| symbol | string | The name of the equity of your choice | - | - |
+| apikey | string | Your API key | - | - |
+
+<!-- REQUEST_PATTERN -->
+**API Request Pattern:**
+
+```http
+https://www.alphavantage.co/query?function=INCOME_STATEMENT&symbol=IBM&apikey=demo';
+```
+
+
+
+<!-- CATEGORY: Currency Exchange -->
+## Currency Exchange
+
+This section contains APIs for retrieving currency exchange rates and currency exchange time series.
+
+<!-- ENDPOINT: CURRENCY_EXCHANGE_RATE -->
+### CURRENCY_EXCHANGE_RATE
+
+This API returns the realtime exchange rate for any pair of digital currency (e.g., Bitcoin) or physical currency (e.g., USD).
+<!-- PARAMETERS:REQUIRED -->
+**Required Parameters:**
+
+| Parameter | Type | Description | Default | Options |
+|-----------|------|-------------|---------|---------|
+| function | string | The function of your choice | - | CURRENCY_EXCHANGE_RATE |
+| from_currency | string | The currency you would like to get the exchange rate for | - | USD, EUR, GBP, etc. |
+| to_currency | string | The destination currency for the exchange rate | - | USD, EUR, GBP, etc. |
+| apikey | string | Your API key | - | - |
+
+<!-- REQUEST_PATTERN -->
+**API Request Pattern:**
+
+```http
+https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=USD&to_currency=JPY&apikey=demo';
+```

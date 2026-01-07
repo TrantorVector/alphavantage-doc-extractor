@@ -58,7 +58,6 @@ fn test_full_extraction_pipeline() {
 /// TODO: This test is currently disabled until the fixture HTML is properly formatted
 /// to match the expected Alpha Vantage documentation structure.
 #[test]
-#[ignore] // Disabled until fixture is properly formatted
 fn test_extraction_with_mock_data() {
     // Skip logging initialization to avoid conflicts
 
@@ -113,7 +112,14 @@ fn test_extraction_with_mock_data() {
 
     // Step 7: Render to markdown
     let renderer = MarkdownRenderer::new();
-    let markdown = renderer.render(&document_structure, true).unwrap();
+    let mut markdown = renderer.render(&document_structure, true).unwrap();
+
+    // Normalize timestamp for snapshot testing
+    let re_yaml = regex::Regex::new(r"extracted_at: .*\n").unwrap();
+    markdown = re_yaml.replace(&markdown, "extracted_at: \"2024-01-01T00:00:00Z\"\n").to_string();
+
+    let re_text = regex::Regex::new(r"\*\*Extracted:\*\* .* UTC").unwrap();
+    markdown = re_text.replace(&markdown, "**Extracted:** 2024-01-01 00:00 UTC").to_string();
 
     // Step 8: Validate output
     let validator = OutputValidator::new();
