@@ -32,7 +32,7 @@ impl MarkdownRenderer {
     /// Render a complete document structure to markdown.
     ///
     /// Builds a complete markdown document with header, all categories,
-    /// and proper formatting.
+    /// and LLM optimizations for better parsing.
     #[instrument(skip(self, document), fields(request_id = %uuid::Uuid::new_v4()))]
     pub fn render(&self, document: &DocumentStructure) -> RenderResult<String> {
         let mut markdown = String::new();
@@ -47,7 +47,10 @@ impl MarkdownRenderer {
             markdown.push_str("\n\n\n"); // Three newlines between categories
         }
 
-        Ok(markdown)
+        // Apply LLM optimizations
+        let optimized = self.optimize_for_llm(markdown, &document.metadata, &document.categories);
+
+        Ok(optimized)
     }
 
     /// Render the document header with metadata.
@@ -210,6 +213,163 @@ impl MarkdownRenderer {
     /// Uses 'http' language for syntax highlighting of URLs.
     pub fn render_request_pattern(&self, pattern: &str) -> String {
         format!("**API Request Pattern:**\n\n```http\n{}\n```", pattern)
+    }
+
+    /// Optimize markdown output for LLM consumption.
+    ///
+    /// Adds frontmatter, table of contents, semantic markers, and optimizes whitespace
+    /// for better LLM parsing and token efficiency.
+    #[instrument(skip(self, metadata, categories))]
+    pub fn optimize_for_llm(
+        &self,
+        markdown: String,
+        metadata: &crate::domain::DocumentMetadata,
+        categories: &[crate::domain::ApiCategory],
+    ) -> String {
+        let mut optimized = String::new();
+
+        // Add YAML frontmatter
+        optimized.push_str(&self.add_frontmatter(metadata));
+        optimized.push('\n');
+
+        // Add table of contents
+        optimized.push_str(&self.add_table_of_contents(categories));
+        optimized.push('\n');
+
+        // Add semantic markers and optimize whitespace
+        let with_markers = self.add_semantic_markers(markdown);
+        let optimized_markdown = self.optimize_whitespace(with_markers);
+
+        optimized.push_str(&optimized_markdown);
+        optimized
+    }
+
+    /// Generate YAML frontmatter for document metadata.
+    ///
+    /// Creates a YAML block with metadata for better LLM context.
+    pub fn add_frontmatter(&self, metadata: &crate::domain::DocumentMetadata) -> String {
+        let endpoint_count = metadata.endpoint_count.unwrap_or(0);
+        let category_count = metadata.category_count.unwrap_or(0);
+
+        format!(
+            "---\ntitle: \"{}\"\nsource: \"{}\"\nextracted_at: \"{}\"\nendpoint_count: {}\ncategory_count: {}\nformat_version: \"2.0\"\n---",
+            metadata.title,
+            metadata.source_url,
+            metadata.extracted_at.format("%Y-%m-%dT%H:%M:%SZ"),
+            endpoint_count,
+            category_count
+        )
+    }
+
+    /// Add semantic markers as HTML comments for better LLM parsing.
+    ///
+    /// Inserts HTML comments before major sections to help LLMs understand structure.
+    pub fn add_semantic_markers(&self, markdown: String) -> String {
+        let mut result = String::new();
+        let lines: Vec<&str> = markdown.lines().collect();
+
+        for line in lines {
+            // Category markers
+            if line.starts_with("## ") && !line.starts_with("## Table of Contents") {
+                let category_name = line.strip_prefix("## ").unwrap_or("");
+                result.push_str(&format!("<!-- CATEGORY: {} -->\n", category_name));
+            }
+            // Endpoint markers
+            else if line.starts_with("### ") {
+                let function_name = line
+                    .strip_prefix("### ")
+                    .unwrap_or("")
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("");
+                result.push_str(&format!("<!-- ENDPOINT: {} -->\n", function_name));
+            }
+            // Parameter table markers
+            else if line.contains("**Required Parameters:**") {
+                result.push_str("<!-- PARAMETERS:REQUIRED -->\n");
+            } else if line.contains("**Optional Parameters:**") {
+                result.push_str("<!-- PARAMETERS:OPTIONAL -->\n");
+            }
+            // Code example markers
+            else if line.starts_with("```python") {
+                result.push_str("<!-- CODE:PYTHON -->\n");
+            }
+            // Request pattern markers
+            else if line.contains("**API Request Pattern:**") {
+                result.push_str("<!-- REQUEST_PATTERN -->\n");
+            }
+
+            result.push_str(line);
+            result.push('\n');
+        }
+
+        // Remove trailing newline
+        result.trim_end().to_string()
+    }
+
+    /// Optimize whitespace for consistent formatting and token efficiency.
+    ///
+    /// Normalizes spacing between sections for better LLM parsing.
+    pub fn optimize_whitespace(&self, markdown: String) -> String {
+        // For now, just trim trailing whitespace from lines
+        // This is a simplified implementation - the full whitespace optimization
+        // would require more complex parsing of the markdown structure
+        markdown
+            .lines()
+            .map(|line| line.trim_end())
+            .collect::<Vec<&str>>()
+            .join("\n")
+            .trim_end()
+            .to_string()
+    }
+
+    /// Generate a table of contents with GitHub-style anchor links.
+    ///
+    /// Creates a hierarchical TOC with proper anchor slugs.
+    pub fn add_table_of_contents(&self, categories: &[crate::domain::ApiCategory]) -> String {
+        let mut toc = String::from("## Table of Contents\n\n");
+
+        for category in categories {
+            let category_slug = self.create_slug(&category.name);
+            toc.push_str(&format!("- [{}](#{})\n", category.name, category_slug));
+
+            for endpoint in &category.endpoints {
+                let endpoint_slug = self.create_slug(&endpoint.function_name);
+                toc.push_str(&format!(
+                    "  - [{}](#{})\n",
+                    endpoint.function_name, endpoint_slug
+                ));
+            }
+
+            toc.push('\n');
+        }
+
+        toc.trim_end().to_string()
+    }
+
+    /// Create a GitHub-style anchor slug from text.
+    ///
+    /// Converts text to lowercase, replaces spaces with hyphens,
+    /// and removes special characters.
+    pub fn create_slug(&self, text: &str) -> String {
+        text.to_lowercase()
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == ' ' || c == '-' {
+                    if c == ' ' {
+                        '-'
+                    } else {
+                        c
+                    }
+                } else {
+                    '-' // Replace special chars with hyphens
+                }
+            })
+            .collect::<String>()
+            .split('-')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<&str>>()
+            .join("-")
     }
 }
 
@@ -488,5 +648,144 @@ print(response.json())"#
         assert!(result.contains("**Endpoints:** 42"));
         assert!(result.contains("**Categories:** 7"));
         assert!(result.contains("---"));
+    }
+
+    /// Test YAML frontmatter generation
+    #[test]
+    fn test_add_frontmatter() {
+        let renderer = MarkdownRenderer::new();
+
+        let url =
+            ValidatedUrl::validate(RawUrl::new("https://api.example.com".to_string())).unwrap();
+        let metadata = DocumentMetadata::new("Test API".to_string(), url).with_counts(10, 3);
+
+        let result = renderer.add_frontmatter(&metadata);
+
+        assert!(result.starts_with("---"));
+        assert!(result.ends_with("---"));
+        assert!(result.contains("title: \"Test API\""));
+        assert!(result.contains("source: \"https://api.example.com/\""));
+        assert!(result.contains("endpoint_count: 10"));
+        assert!(result.contains("category_count: 3"));
+        assert!(result.contains("format_version: \"2.0\""));
+    }
+
+    /// Test semantic markers insertion
+    #[test]
+    fn test_add_semantic_markers() {
+        let renderer = MarkdownRenderer::new();
+
+        let markdown = "# Title\n\n## Stock Data\n\n### TIME_SERIES_DAILY\n\n**Required Parameters:**\n\n| Param | Type | Description |\n\n**Optional Parameters:**\n\n```python\nprint('hello')\n```\n\n**API Request Pattern:**\n\n```http\nGET /query\n```";
+
+        let result = renderer.add_semantic_markers(markdown.to_string());
+
+        assert!(result.contains("<!-- CATEGORY: Stock Data -->"));
+        assert!(result.contains("<!-- ENDPOINT: TIME_SERIES_DAILY -->"));
+        assert!(result.contains("<!-- PARAMETERS:REQUIRED -->"));
+        assert!(result.contains("<!-- PARAMETERS:OPTIONAL -->"));
+        assert!(result.contains("<!-- CODE:PYTHON -->"));
+        assert!(result.contains("<!-- REQUEST_PATTERN -->"));
+    }
+
+    /// Test whitespace optimization
+    #[test]
+    fn test_optimize_whitespace() {
+        let renderer = MarkdownRenderer::new();
+
+        let markdown = "# Title  \n## Category\n### Endpoint\n";
+
+        let result = renderer.optimize_whitespace(markdown.to_string());
+
+        // Should trim trailing whitespace
+        assert!(!result.contains("  \n"));
+        assert!(result.contains("# Title\n"));
+    }
+
+    /// Test table of contents generation
+    #[test]
+    fn test_add_table_of_contents() {
+        let renderer = MarkdownRenderer::new();
+
+        let endpoint1 = ApiEndpoint::new("GET_DATA".to_string(), "Get data".to_string())
+            .with_required_params(vec![Parameter::new(
+                "key".to_string(),
+                "string".to_string(),
+                "API key".to_string(),
+            )]);
+
+        let endpoint2 = ApiEndpoint::new("POST_DATA".to_string(), "Post data".to_string())
+            .with_required_params(vec![Parameter::new(
+                "key".to_string(),
+                "string".to_string(),
+                "API key".to_string(),
+            )]);
+
+        let category1 = ApiCategory::new("Data Operations".to_string()).add_endpoint(endpoint1);
+
+        let category2 = ApiCategory::new("Admin Operations".to_string()).add_endpoint(endpoint2);
+
+        let categories = vec![category1, category2];
+
+        let result = renderer.add_table_of_contents(&categories);
+
+        assert!(result.starts_with("## Table of Contents"));
+        assert!(result.contains("- [Data Operations](#data-operations)"));
+        assert!(result.contains("  - [GET_DATA](#get-data)"));
+        assert!(result.contains("- [Admin Operations](#admin-operations)"));
+        assert!(result.contains("  - [POST_DATA](#post-data)"));
+    }
+
+    /// Test slug creation
+    #[test]
+    fn test_create_slug() {
+        let renderer = MarkdownRenderer::new();
+
+        assert_eq!(renderer.create_slug("Simple Text"), "simple-text");
+        assert_eq!(renderer.create_slug("UPPER CASE"), "upper-case");
+        assert_eq!(renderer.create_slug("Special@Chars!"), "special-chars");
+        assert_eq!(renderer.create_slug("Multiple   Spaces"), "multiple-spaces");
+        assert_eq!(
+            renderer.create_slug("API_Function_Name"),
+            "api-function-name"
+        );
+        assert_eq!(renderer.create_slug("123Numbers"), "123numbers");
+    }
+
+    /// Test full LLM optimization pipeline
+    #[test]
+    fn test_optimize_for_llm() {
+        let renderer = MarkdownRenderer::new();
+
+        let url = ValidatedUrl::validate(RawUrl::new("https://api.test.com".to_string())).unwrap();
+        let metadata = DocumentMetadata::new("Test API".to_string(), url).with_counts(2, 1);
+
+        let endpoint = ApiEndpoint::new("TEST_ENDPOINT".to_string(), "A test endpoint".to_string())
+            .with_required_params(vec![Parameter::new(
+                "key".to_string(),
+                "string".to_string(),
+                "API key".to_string(),
+            )]);
+
+        let category = ApiCategory::new("Test Category".to_string()).add_endpoint(endpoint);
+
+        let categories = vec![category];
+
+        let basic_markdown =
+            "# Test API\n\n## Test Category\n\n### TEST_ENDPOINT\n\nA test endpoint".to_string();
+
+        let result = renderer.optimize_for_llm(basic_markdown, &metadata, &categories);
+
+        // Should contain frontmatter
+        assert!(result.contains("---"));
+        assert!(result.contains("title: \"Test API\""));
+        assert!(result.contains("format_version: \"2.0\""));
+
+        // Should contain TOC
+        assert!(result.contains("## Table of Contents"));
+        assert!(result.contains("- [Test Category](#test-category)"));
+
+        // Should contain semantic markers
+        assert!(result.contains("<!-- CATEGORY: Test Category -->"));
+        assert!(result.contains("<!-- ENDPOINT: TEST_ENDPOINT -->"));
     }
 }
