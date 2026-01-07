@@ -32,10 +32,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Validate configuration
-    config.validate().map_err(|e| {
+    if let Err(e) = config.validate() {
         eprintln!("❌ Configuration validation failed: {}", e);
         process::exit(1);
-    })?;
+    }
 
     println!("✅ Configuration validated");
     println!("📄 Output will be saved to: {}", config.output);

@@ -40,10 +40,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Validate configuration
-    config.validate().map_err(|e| {
+    if let Err(e) = config.validate() {
         eprintln!("❌ Configuration validation failed: {}", e);
         std::process::exit(1);
-    })?;
+    }
 
     println!("✅ Configuration validated");
     println!("🔧 Advanced settings:");
@@ -210,14 +210,13 @@ async fn run_advanced_extraction(
     if config.backup {
         writer
             .write_with_backup(&config.output, &markdown)
-            .await
             .map_err(|e| {
                 println!("❌ File writing with backup failed: {}", e);
                 e
             })?;
         println!("💼 Backup created successfully");
     } else {
-        writer.write(&config.output, &markdown).await.map_err(|e| {
+        writer.write(&config.output, &markdown).map_err(|e| {
             println!("❌ File writing failed: {}", e);
             e
         })?;

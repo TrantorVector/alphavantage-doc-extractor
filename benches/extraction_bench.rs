@@ -65,7 +65,7 @@ fn bench_full_extraction_pipeline(c: &mut Criterion) {
 
                 // Render to markdown
                 let renderer = MarkdownRenderer::new();
-                let markdown = renderer.render(&document_structure).unwrap();
+                let markdown = renderer.render(&document_structure, true).unwrap();
 
                 // Validate output
                 let validator = OutputValidator::new();
@@ -195,7 +195,7 @@ fn bench_markdown_rendering(c: &mut Criterion) {
                 );
 
                 let renderer = MarkdownRenderer::new();
-                let markdown = renderer.render(&document_structure).unwrap();
+                let markdown = renderer.render(&document_structure, true).unwrap();
 
                 black_box(markdown)
             });
@@ -243,7 +243,7 @@ fn bench_output_validation(c: &mut Criterion) {
                 );
 
                 let renderer = MarkdownRenderer::new();
-                let markdown = renderer.render(&document_structure).unwrap();
+                let markdown = renderer.render(&document_structure, true).unwrap();
 
                 let validator = OutputValidator::new();
                 let validation_report = validator.validate(&markdown).unwrap();

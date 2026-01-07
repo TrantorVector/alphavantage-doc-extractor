@@ -115,14 +115,14 @@ async fn extract_documentation_basic(
 
     // Write to file
     let writer = FileWriter::new();
-    writer.write(output_path, &markdown).await?;
+    writer.write(output_path, &markdown)?;
 
     let file_size = writer.get_file_size(output_path)?;
 
     Ok(ExtractionResult {
         categories: document_structure.categories.len(),
         endpoints: total_endpoints,
-        file_size,
+        file_size: file_size as usize,
     })
 }
 
@@ -183,7 +183,7 @@ async fn extract_with_custom_processing(
 
     // Write to file
     let writer = FileWriter::new();
-    writer.write(output_path, &markdown).await?;
+    writer.write(output_path, &markdown)?;
 
     let processing_time = start_time.elapsed().as_millis();
     let total_bytes_processed = original_bytes + cleaned_bytes + markdown_bytes;
@@ -255,7 +255,7 @@ where
     let markdown = renderer.render(&document_structure, true)?;
 
     let writer = FileWriter::new();
-    writer.write(output_path, &markdown).await?;
+    writer.write(output_path, &markdown)?;
 
     Ok(FilteredExtractionResult {
         categories: document_structure.categories.len(),
@@ -340,7 +340,7 @@ mod advanced_patterns {
             match format_name {
                 "markdown" => {
                     let markdown = renderer.render(&document_structure, true)?;
-                    writer.write(&output_path, &markdown).await?;
+                    writer.write(&output_path, &markdown)?;
                     println!("✅ Generated Markdown: {}", output_path);
                 }
                 "json" => {
@@ -351,7 +351,7 @@ mod advanced_patterns {
                         document_structure.categories.len(),
                         total_endpoints
                     );
-                    writer.write(&output_path, &json_content).await?;
+                    writer.write(&output_path, &json_content)?;
                     println!("✅ Generated JSON: {}", output_path);
                 }
                 _ => continue,
