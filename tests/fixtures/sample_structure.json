@@ -1,0 +1,294 @@
+{
+  "metadata": {
+    "title": "Alpha Vantage API Documentation",
+    "source_url": "https://www.alphavantage.co/documentation",
+    "extracted_at": "2024-01-07T12:00:00Z",
+    "endpoint_count": 5,
+    "category_count": 2
+  },
+  "categories": [
+    {
+      "name": "Stock Time Series Data",
+      "description": "Endpoints for retrieving historical stock price data with various intervals and formats.",
+      "endpoints": [
+        {
+          "function_name": "TIME_SERIES_INTRADAY",
+          "description": "Returns intraday time series data for a given stock symbol with 1-minute, 5-minute, 15-minute, 30-minute, or 60-minute intervals.",
+          "required_params": [
+            {
+              "name": "function",
+              "value_type": "string",
+              "description": "The API function to call",
+              "default": null,
+              "options": []
+            },
+            {
+              "name": "symbol",
+              "value_type": "string",
+              "description": "The stock symbol to retrieve data for",
+              "default": null,
+              "options": []
+            },
+            {
+              "name": "apikey",
+              "value_type": "string",
+              "description": "Your API key",
+              "default": null,
+              "options": []
+            }
+          ],
+          "optional_params": [
+            {
+              "name": "interval",
+              "value_type": "string",
+              "description": "Time interval between data points",
+              "default": "5min",
+              "options": ["1min", "5min", "15min", "30min", "60min"]
+            },
+            {
+              "name": "outputsize",
+              "value_type": "string",
+              "description": "The size of the output",
+              "default": "compact",
+              "options": ["compact", "full"]
+            }
+          ],
+          "request_pattern": "https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval={interval}&outputsize={outputsize}&apikey={apikey}",
+          "python_example": {
+            "language": "python",
+            "code": "import requests\n\nurl = 'https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=IBM&interval=5min&apikey=demo'\nr = requests.get(url)\ndata = r.json()\nprint(data)"
+          },
+          "premium_only": false
+        },
+        {
+          "function_name": "TIME_SERIES_DAILY",
+          "description": "Returns daily time series data for a given stock symbol.",
+          "required_params": [
+            {
+              "name": "function",
+              "value_type": "string",
+              "description": "The API function to call",
+              "default": null,
+              "options": []
+            },
+            {
+              "name": "symbol",
+              "value_type": "string",
+              "description": "The stock symbol to retrieve data for",
+              "default": null,
+              "options": []
+            },
+            {
+              "name": "apikey",
+              "value_type": "string",
+              "description": "Your API key",
+              "default": null,
+              "options": []
+            }
+          ],
+          "optional_params": [
+            {
+              "name": "outputsize",
+              "value_type": "string",
+              "description": "The size of the output",
+              "default": "compact",
+              "options": ["compact", "full"]
+            }
+          ],
+          "request_pattern": "https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&outputsize={outputsize}&apikey={apikey}",
+          "python_example": {
+            "language": "python",
+            "code": "import requests\n\nurl = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=demo'\nr = requests.get(url)\ndata = r.json()\nprint(data)"
+          },
+          "premium_only": false
+        }
+      ]
+    },
+    {
+      "name": "Technical Indicators",
+      "description": "Endpoints for calculating various technical indicators using historical price data.",
+      "endpoints": [
+        {
+          "function_name": "SMA",
+          "description": "Returns the simple moving average (SMA) values for a given stock symbol and time period.",
+          "required_params": [
+            {
+              "name": "function",
+              "value_type": "string",
+              "description": "The API function to call",
+              "default": null,
+              "options": []
+            },
+            {
+              "name": "symbol",
+              "value_type": "string",
+              "description": "The stock symbol to retrieve data for",
+              "default": null,
+              "options": []
+            },
+            {
+              "name": "interval",
+              "value_type": "string",
+              "description": "Time interval between data points",
+              "default": null,
+              "options": ["1min", "5min", "15min", "30min", "60min", "daily", "weekly", "monthly"]
+            },
+            {
+              "name": "time_period",
+              "value_type": "integer",
+              "description": "Number of data points to average",
+              "default": null,
+              "options": []
+            },
+            {
+              "name": "series_type",
+              "value_type": "string",
+              "description": "The desired price type in the time series",
+              "default": null,
+              "options": ["open", "high", "low", "close"]
+            },
+            {
+              "name": "apikey",
+              "value_type": "string",
+              "description": "Your API key",
+              "default": null,
+              "options": []
+            }
+          ],
+          "optional_params": [],
+          "request_pattern": "https://www.alphavantage.co/query?function=SMA&symbol={symbol}&interval={interval}&time_period={time_period}&series_type={series_type}&apikey={apikey}",
+          "python_example": {
+            "language": "python",
+            "code": "import requests\n\nurl = 'https://www.alphavantage.co/query?function=SMA&symbol=IBM&interval=daily&time_period=10&series_type=close&apikey=demo'\nr = requests.get(url)\ndata = r.json()\nprint(data)"
+          },
+          "premium_only": false
+        },
+        {
+          "function_name": "RSI",
+          "description": "Returns the relative strength index (RSI) values for a given stock symbol and time period.",
+          "required_params": [
+            {
+              "name": "function",
+              "value_type": "string",
+              "description": "The API function to call",
+              "default": null,
+              "options": []
+            },
+            {
+              "name": "symbol",
+              "value_type": "string",
+              "description": "The stock symbol to retrieve data for",
+              "default": null,
+              "options": []
+            },
+            {
+              "name": "interval",
+              "value_type": "string",
+              "description": "Time interval between data points",
+              "default": null,
+              "options": ["1min", "5min", "15min", "30min", "60min", "daily", "weekly", "monthly"]
+            },
+            {
+              "name": "time_period",
+              "value_type": "integer",
+              "description": "Number of data points to average",
+              "default": null,
+              "options": []
+            },
+            {
+              "name": "series_type",
+              "value_type": "string",
+              "description": "The desired price type in the time series",
+              "default": null,
+              "options": ["open", "high", "low", "close"]
+            },
+            {
+              "name": "apikey",
+              "value_type": "string",
+              "description": "Your API key",
+              "default": null,
+              "options": []
+            }
+          ],
+          "optional_params": [],
+          "request_pattern": "https://www.alphavantage.co/query?function=RSI&symbol={symbol}&interval={interval}&time_period={time_period}&series_type={series_type}&apikey={apikey}",
+          "python_example": {
+            "language": "python",
+            "code": "import requests\n\nurl = 'https://www.alphavantage.co/query?function=RSI&symbol=IBM&interval=daily&time_period=14&series_type=close&apikey=demo'\nr = requests.get(url)\ndata = r.json()\nprint(data)"
+          },
+          "premium_only": false
+        },
+        {
+          "function_name": "STOCHRSI",
+          "description": "Returns the stochastic relative strength index (STOCHRSI) values. This is a premium endpoint.",
+          "required_params": [
+            {
+              "name": "function",
+              "value_type": "string",
+              "description": "The API function to call",
+              "default": null,
+              "options": []
+            },
+            {
+              "name": "symbol",
+              "value_type": "string",
+              "description": "The stock symbol to retrieve data for",
+              "default": null,
+              "options": []
+            },
+            {
+              "name": "interval",
+              "value_type": "string",
+              "description": "Time interval between data points",
+              "default": null,
+              "options": ["1min", "5min", "15min", "30min", "60min", "daily", "weekly", "monthly"]
+            },
+            {
+              "name": "time_period",
+              "value_type": "integer",
+              "description": "Number of data points to average",
+              "default": null,
+              "options": []
+            },
+            {
+              "name": "series_type",
+              "value_type": "string",
+              "description": "The desired price type in the time series",
+              "default": null,
+              "options": ["open", "high", "low", "close"]
+            },
+            {
+              "name": "apikey",
+              "value_type": "string",
+              "description": "Your API key",
+              "default": null,
+              "options": []
+            }
+          ],
+          "optional_params": [
+            {
+              "name": "fastkperiod",
+              "value_type": "integer",
+              "description": "The fast k period",
+              "default": "5",
+              "options": []
+            },
+            {
+              "name": "fastdperiod",
+              "value_type": "integer",
+              "description": "The fast d period",
+              "default": "3",
+              "options": []
+            }
+          ],
+          "request_pattern": "https://www.alphavantage.co/query?function=STOCHRSI&symbol={symbol}&interval={interval}&time_period={time_period}&series_type={series_type}&fastkperiod={fastkperiod}&fastdperiod={fastdperiod}&apikey={apikey}",
+          "python_example": {
+            "language": "python",
+            "code": "import requests\n\nurl = 'https://www.alphavantage.co/query?function=STOCHRSI&symbol=IBM&interval=daily&time_period=14&series_type=close&fastkperiod=5&fastdperiod=3&apikey=demo'\nr = requests.get(url)\ndata = r.json()\nprint(data)"
+          },
+          "premium_only": true
+        }
+      ]
+    }
+  ]
+}

@@ -5,3 +5,4 @@
 
 mod fuzz_tests;
 mod logging_tests;
+mod simple_test;

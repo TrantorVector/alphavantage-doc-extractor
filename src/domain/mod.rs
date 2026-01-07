@@ -30,3 +30,6 @@ pub use transformer::HtmlCleaner;
 
 // Re-export extractor types
 pub use extractor::ContentExtractor;
+
+// Re-export renderer types
+pub use renderer::MarkdownRenderer;
