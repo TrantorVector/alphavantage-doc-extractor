@@ -33,8 +33,16 @@ impl MarkdownRenderer {
     ///
     /// Builds a complete markdown document with header, all categories,
     /// and LLM optimizations for better parsing.
+    ///
+    /// # Arguments
+    /// * `document` - The document structure to render
+    /// * `validate_output` - Whether to validate the rendered output
     #[instrument(skip(self, document), fields(request_id = %uuid::Uuid::new_v4()))]
-    pub fn render(&self, document: &DocumentStructure) -> RenderResult<String> {
+    pub fn render(
+        &self,
+        document: &DocumentStructure,
+        validate_output: bool,
+    ) -> RenderResult<String> {
         let mut markdown = String::new();
 
         // Add document header
@@ -50,16 +58,18 @@ impl MarkdownRenderer {
         // Apply LLM optimizations
         let optimized = self.optimize_for_llm(markdown, &document.metadata, &document.categories);
 
-        // Validate the output
-        let validator = OutputValidator::new();
-        let validation_report = validator.validate(&optimized)?;
+        // Validate the output if requested
+        if validate_output {
+            let validator = OutputValidator::new();
+            let validation_report = validator.validate(&optimized)?;
 
-        if !validation_report.is_valid() {
-            return Err(RenderError::ValidationFailed(format!(
-                "Output validation failed with {} errors and {} warnings",
-                validation_report.errors.len(),
-                validation_report.warnings.len()
-            )));
+            if !validation_report.is_valid() {
+                return Err(RenderError::ValidationFailed(format!(
+                    "Output validation failed with {} errors and {} warnings",
+                    validation_report.errors.len(),
+                    validation_report.warnings.len()
+                )));
+            }
         }
 
         Ok(optimized)
@@ -422,7 +432,7 @@ mod tests {
 
         let document = DocumentStructure::new(metadata, vec![category]);
 
-        let result = renderer.render(&document);
+        let result = renderer.render(&document, true);
         assert!(result.is_ok());
 
         let markdown = result.unwrap();

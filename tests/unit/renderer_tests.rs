@@ -33,7 +33,7 @@ fn test_render_document_single_category() {
 
     let document = DocumentStructure::new(metadata, vec![category]);
 
-    let result = renderer.render(&document);
+    let result = renderer.render(&document, true);
     assert!(result.is_ok());
 
     let markdown = result.unwrap();

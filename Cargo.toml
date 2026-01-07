@@ -1,10 +1,23 @@
 [package]
 name = "alphavantage-doc-extractor"
-version = "0.1.0"
+version = "2.0.0"
 edition = "2021"
 rust-version = "1.75"
 license = "MIT"
+description = "Extract Alpha Vantage API documentation and convert to LLM-optimized Markdown with semantic markers and validation"
+readme = "README.md"
 repository = "https://github.com/TrantorVector/alphavantage-doc-extractor"
+documentation = "https://docs.rs/alphavantage-doc-extractor"
+homepage = "https://github.com/TrantorVector/alphavantage-doc-extractor"
+keywords = ["alphavantage", "documentation", "markdown", "api", "scraper", "llm", "extraction"]
+categories = ["command-line-utilities", "web-programming", "text-processing", "api-bindings"]
+authors = ["TrantorVector"]
+exclude = [
+    "docs/**/*",
+    "examples/**/*",
+    "tests/fixtures/**/*",
+    ".github/**/*",
+]
 
 [dependencies]
 # CLI
@@ -42,6 +55,8 @@ tempfile = "3.8"
 insta = "1.34"
 tokio-test = "0.4"
 proptest = "1.4"
+criterion = { version = "0.5", features = ["html_reports"] }
+cargo-audit = "0.20"
 
 [profile.release]
 opt-level = 3

@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alpha Vantage API Documentation - Complete Test Fixture</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        h1, h2, h3 { color: #333; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .premium { background-color: #fff3cd; padding: 5px; border-radius: 3px; }
+        pre { background-color: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .code-example { margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <main id="main-content">
+    <h1>Alpha Vantage API Documentation</h1>
+    <p>Welcome to the Alpha Vantage API documentation. This comprehensive guide covers all available endpoints for real-time and historical financial data.</p>
+
+    <h2>Stock Time Series Data</h2>
+    <p>This section contains APIs for retrieving stock time series data including intraday, daily, weekly, and monthly prices.</p>
+
+    <h3>TIME_SERIES_INTRADAY</h3>
+    <p>This API returns intraday time series (timestamp, open, high, low, close, volume) of the equity specified.</p>
+
+    <h4>Parameters</h4>
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Default</th>
+            <th>Options</th>
+        </tr>
+        <tr>
+            <td>function</td>
+            <td>string</td>
+            <td>The time series of your choice</td>
+            <td></td>
+            <td>TIME_SERIES_INTRADAY</td>
+        </tr>
+        <tr>
+            <td>symbol</td>
+            <td>string</td>
+            <td>The name of the equity of your choice</td>
+            <td></td>
+            <td></td>
+        </tr>
+        <tr>
+            <td>interval</td>
+            <td>string</td>
+            <td>Time interval between two consecutive data points</td>
+            <td>5min</td>
+            <td>1min, 5min, 15min, 30min, 60min</td>
+        </tr>
+        <tr>
+            <td>apikey</td>
+            <td>string</td>
+            <td>Your API key</td>
+            <td></td>
+            <td></td>
+        </tr>
+        <tr>
+            <td>outputsize</td>
+            <td>string</td>
+            <td>By default, outputsize=compact</td>
+            <td>compact</td>
+            <td>compact, full</td>
+        </tr>
+    </table>
+
+    <h4>Python Code Example</h4>
+    <div class="code-example">
+        <pre><code>import requests
+
+# replace the "demo" apikey below with your own key from https://www.alphavantage.co/support/#api-key
+url = 'https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=IBM&interval=5min&apikey=demo'
+r = requests.get(url)
+data = r.json()
+
+print(data)</code></pre>
+    </div>
+
+    <h4>Request Pattern</h4>
+    <pre><code>https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=IBM&interval=5min&apikey=YOUR_API_KEY</code></pre>
+
+    <h3>TIME_SERIES_DAILY</h3>
+    <p class="premium">PREMIUM ENDPOINT: This endpoint requires a premium subscription.</p>
+    <p>This API returns daily time series (date, daily open, daily high, daily low, daily close, daily volume) of the global equity specified.</p>
+
+    <h4>Parameters</h4>
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Default</th>
+            <th>Options</th>
+        </tr>
+        <tr>
+            <td>function</td>
+            <td>string</td>
+            <td>The time series of your choice</td>
+            <td></td>
+            <td>TIME_SERIES_DAILY</td>
+        </tr>
+        <tr>
+            <td>symbol</td>
+            <td>string</td>
+            <td>The name of the equity of your choice</td>
+            <td></td>
+            <td></td>
+        </tr>
+        <tr>
+            <td>outputsize</td>
+            <td>string</td>
+            <td>By default, outputsize=compact</td>
+            <td>compact</td>
+            <td>compact, full</td>
+        </tr>
+        <tr>
+            <td>apikey</td>
+            <td>string</td>
+            <td>Your API key</td>
+            <td></td>
+            <td></td>
+        </tr>
+    </table>
+
+    <h4>R Code Example</h4>
+    <div class="code-example">
+        <pre><code>library(httr)
+
+# replace the "demo" apikey below with your own key from https://www.alphavantage.co/support/#api-key
+url <- 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=demo'
+response <- GET(url)
+data <- content(response, "parsed")
+
+print(data)</code></pre>
+    </div>
+
+    <h4>Request Pattern</h4>
+    <pre><code>https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=YOUR_API_KEY</code></pre>
+
+    <h2>Fundamental Data</h2>
+    <p>This section contains APIs for retrieving fundamental data including company overview, income statements, balance sheets, and cash flow statements.</p>
+
+    <h3>OVERVIEW</h3>
+    <p>This API returns the company information, financial ratios, and other key metrics for the equity specified.</p>
+
+    <h4>Parameters</h4>
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Default</th>
+            <th>Options</th>
+        </tr>
+        <tr>
+            <td>function</td>
+            <td>string</td>
+            <td>The function of your choice</td>
+            <td></td>
+            <td>OVERVIEW</td>
+        </tr>
+        <tr>
+            <td>symbol</td>
+            <td>string</td>
+            <td>The name of the equity of your choice</td>
+            <td></td>
+            <td></td>
+        </tr>
+        <tr>
+            <td>apikey</td>
+            <td>string</td>
+            <td>Your API key</td>
+            <td></td>
+            <td></td>
+        </tr>
+    </table>
+
+    <h4>VBA Code Example</h4>
+    <div class="code-example">
+        <pre><code>Sub GetCompanyOverview()
+    Dim url As String
+    Dim xmlHttp As Object
+
+    ' replace the "demo" apikey below with your own key from https://www.alphavantage.co/support/#api-key
+    url = "https://www.alphavantage.co/query?function=OVERVIEW&symbol=IBM&apikey=demo"
+
+    Set xmlHttp = CreateObject("MSXML2.XMLHTTP")
+    xmlHttp.Open "GET", url, False
+    xmlHttp.send
+
+    MsgBox xmlHttp.responseText
+End Sub</code></pre>
+    </div>
+
+    <h4>Request Pattern</h4>
+    <pre><code>https://www.alphavantage.co/query?function=OVERVIEW&symbol=IBM&apikey=YOUR_API_KEY</code></pre>
+
+    <h3>INCOME_STATEMENT</h3>
+    <p>This API returns the annual and quarterly income statements for the company of interest.</p>
+
+    <h4>Parameters</h4>
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Default</th>
+            <th>Options</th>
+        </tr>
+        <tr>
+            <td>function</td>
+            <td>string</td>
+            <td>The function of your choice</td>
+            <td></td>
+            <td>INCOME_STATEMENT</td>
+        </tr>
+        <tr>
+            <td>symbol</td>
+            <td>string</td>
+            <td>The name of the equity of your choice</td>
+            <td></td>
+            <td></td>
+        </tr>
+        <tr>
+            <td>apikey</td>
+            <td>string</td>
+            <td>Your API key</td>
+            <td></td>
+            <td></td>
+        </tr>
+    </table>
+
+    <h4>MATLAB Code Example</h4>
+    <div class="code-example">
+        <pre><code>% replace the "demo" apikey below with your own key from https://www.alphavantage.co/support/#api-key
+url = 'https://www.alphavantage.co/query?function=INCOME_STATEMENT&symbol=IBM&apikey=demo';
+data = webread(url);
+
+disp(data);</code></pre>
+    </div>
+
+    <h4>Request Pattern</h4>
+    <pre><code>https://www.alphavantage.co/query?function=INCOME_STATEMENT&symbol=IBM&apikey=YOUR_API_KEY</code></pre>
+
+    <h2>Currency Exchange</h2>
+    <p>This section contains APIs for retrieving currency exchange rates and currency exchange time series.</p>
+
+    <h3>CURRENCY_EXCHANGE_RATE</h3>
+    <p>This API returns the realtime exchange rate for any pair of digital currency (e.g., Bitcoin) or physical currency (e.g., USD).</p>
+
+    <h4>Parameters</h4>
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Default</th>
+            <th>Options</th>
+        </tr>
+        <tr>
+            <td>function</td>
+            <td>string</td>
+            <td>The function of your choice</td>
+            <td></td>
+            <td>CURRENCY_EXCHANGE_RATE</td>
+        </tr>
+        <tr>
+            <td>from_currency</td>
+            <td>string</td>
+            <td>The currency you would like to get the exchange rate for</td>
+            <td></td>
+            <td>USD, EUR, GBP, etc.</td>
+        </tr>
+        <tr>
+            <td>to_currency</td>
+            <td>string</td>
+            <td>The destination currency for the exchange rate</td>
+            <td></td>
+            <td>USD, EUR, GBP, etc.</td>
+        </tr>
+        <tr>
+            <td>apikey</td>
+            <td>string</td>
+            <td>Your API key</td>
+            <td></td>
+            <td></td>
+        </tr>
+    </table>
+
+    <h4>JavaScript Code Example</h4>
+    <div class="code-example">
+        <pre><code>// replace the "demo" apikey below with your own key from https://www.alphavantage.co/support/#api-key
+const url = 'https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=USD&to_currency=JPY&apikey=demo';
+
+fetch(url)
+  .then(response => response.json())
+  .then(data => console.log(data))
+  .catch(error => console.error('Error:', error));</code></pre>
+    </div>
+
+    <h4>Request Pattern</h4>
+    <pre><code>https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=USD&to_currency=JPY&apikey=YOUR_API_KEY</code></pre>
+
+    <div style="margin-top: 50px; padding: 20px; background-color: #f8f9fa; border-radius: 5px;">
+        <h3>Getting Started</h3>
+        <p>To get started with the Alpha Vantage API:</p>
+        <ol>
+            <li>Get your free API key from <a href="https://www.alphavantage.co/support/#api-key">our website</a></li>
+            <li>Choose the endpoint that fits your needs</li>
+            <li>Make your first API call</li>
+            <li>Parse the JSON response</li>
+        </ol>
+        <p><strong>Note:</strong> The free tier allows 5 API requests per minute and 500 requests per day.</p>
+    </div>
+
+    <script>
+        // This script should be cleaned out by the HTML cleaner
+        console.log("This should not appear in the final output");
+    </script>
+    </main>
+</body>
+</html>

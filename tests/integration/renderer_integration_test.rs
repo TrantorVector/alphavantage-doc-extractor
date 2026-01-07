@@ -22,7 +22,7 @@ fn test_render_complete_document() {
             .expect("Failed to parse sample_structure.json");
 
     // Render to markdown
-    let result = renderer.render(&document);
+    let result = renderer.render(&document, true);
     assert!(result.is_ok(), "Rendering should succeed");
 
     let markdown = result.unwrap();
@@ -105,7 +105,7 @@ fn test_render_output_file_format() {
 
     let document = alphavantage_doc_extractor::domain::DocumentStructure::new(metadata, vec![category]);
 
-    let result = renderer.render(&document);
+    let result = renderer.render(&document, true);
     assert!(result.is_ok());
 
     let markdown = result.unwrap();

@@ -33,9 +33,10 @@ impl<'a> ContentExtractor<'a> {
 
     /// Extract all API categories from the main content area.
     ///
-    /// This method finds all `<h2>` elements in the main content and attempts
-    /// to parse them into `ApiCategory` instances. Failed extractions are logged
-    /// as warnings but don't stop the overall extraction process.
+    /// This method finds all `<h2>` and `<h3>` elements in the main content and attempts
+    /// to parse them into `ApiCategory` instances with their endpoints.
+    /// It uses a linear scan of headings to handle nested structures where
+    /// endpoints might not be direct siblings of categories.
     ///
     /// # Arguments
     /// * `main_content` - The main content element to extract categories from
@@ -47,31 +48,71 @@ impl<'a> ContentExtractor<'a> {
         &self,
         main_content: ElementRef,
     ) -> ExtractionResult<Vec<ApiCategory>> {
-        let h2_selector = Selector::parse("h2").map_err(|e| {
+        let heading_selector = Selector::parse("h2, h3, h4").map_err(|e| {
             ContentExtractionError::CategoryExtractionFailed(
                 "selector".to_string(),
-                format!("Failed to parse h2 selector: {}", e),
+                format!("Failed to parse heading selector: {}", e),
             )
         })?;
 
-        let h2_elements: Vec<ElementRef> = main_content.select(&h2_selector).collect();
+        let elements: Vec<ElementRef> = main_content.select(&heading_selector).collect();
 
-        if h2_elements.is_empty() {
+        if elements.is_empty() {
             return Err(ContentExtractionError::CategoryExtractionFailed(
-                "no_h2_found".to_string(),
-                "No h2 elements found in main content".to_string(),
+                "no_headings_found".to_string(),
+                "No h2, h3, or h4 elements found in main content".to_string(),
             ));
         }
 
         let mut categories = Vec::new();
+        let mut current_category: Option<ApiCategory> = None;
 
-        for h2_element in h2_elements {
-            match self.parse_category(h2_element) {
-                Ok(category) => categories.push(category),
-                Err(e) => {
-                    warn!("Failed to parse category: {}", e);
-                    // Continue with other categories
+        for element in elements {
+            let tag_name = element.value().name();
+
+            if tag_name == "h2" {
+                // Save previous category if it exists
+                if let Some(cat) = current_category {
+                    if !cat.endpoints.is_empty() {
+                        categories.push(cat);
+                    } else {
+                        warn!("Skipping empty category: {}", cat.name);
+                    }
                 }
+
+                // Start new category
+                match self.parse_category(element) {
+                    Ok(cat) => current_category = Some(cat),
+                    Err(e) => {
+                        warn!("Failed to parse category: {}", e);
+                        current_category = None;
+                    }
+                }
+            } else if tag_name == "h3" || tag_name == "h4" {
+                // Add endpoint to current category
+                if let Some(mut cat) = current_category.take() {
+                    match self.parse_endpoint(element) {
+                        Ok(endpoint) => {
+                            cat = cat.add_endpoint(endpoint);
+                        }
+                        Err(e) => {
+                            warn!("Failed to parse endpoint: {}", e);
+                        }
+                    }
+                    current_category = Some(cat);
+                } else {
+                    // warn!("Found endpoint ({}) before any category (h2): {:?}", tag_name, crate::domain::parser::extract_text(&element));
+                }
+            }
+        }
+
+
+        // Push the final category
+        if let Some(cat) = current_category {
+            if !cat.endpoints.is_empty() {
+                categories.push(cat);
+            } else {
+                warn!("Skipping empty category: {}", cat.name);
             }
         }
 
@@ -85,10 +126,9 @@ impl<'a> ContentExtractor<'a> {
         Ok(categories)
     }
 
-    /// Parse a single category from an h2 element.
+    /// Parse a single category from an h2 element (metadata only).
     ///
-    /// This method extracts the category name, optional description, and all
-    /// endpoints from an h2 element and its following siblings.
+    /// This method extracts the category name and optional description.
     ///
     /// # Arguments
     /// * `h2_element` - The h2 element to parse
@@ -99,16 +139,10 @@ impl<'a> ContentExtractor<'a> {
     fn parse_category(&self, h2_element: ElementRef) -> ExtractionResult<ApiCategory> {
         let name = self.extract_category_name(h2_element)?;
         let description = self.extract_category_description(h2_element);
-        let endpoints = self.extract_endpoints(h2_element);
 
         let mut category = ApiCategory::new(name);
         if let Some(desc) = description {
             category = category.with_description(desc);
-        }
-
-        // Add all extracted endpoints to the category
-        for endpoint in endpoints {
-            category = category.add_endpoint(endpoint);
         }
 
         Ok(category)
@@ -454,13 +488,14 @@ impl<'a> ContentExtractor<'a> {
         false
     }
 
-    /// Extract parameters from tables following an h3 element.
+    /// Extract parameters from tables following an endpoint heading.
     ///
-    /// This method looks for parameter tables after an h3 endpoint heading and
+    /// This method looks for parameter tables after an endpoint heading and
     /// parses them into required and optional parameters.
+    /// It also supports extracting parameters from paragraphs (new Alpha Vantage format).
     ///
     /// # Arguments
-    /// * `h3_element` - The h3 element representing the endpoint
+    /// * `h3_element` - The heading element representing the endpoint (h3 or h4)
     ///
     /// # Returns
     /// A tuple of (required_parameters, optional_parameters)
@@ -475,12 +510,13 @@ impl<'a> ContentExtractor<'a> {
         while let Some(sibling) = current {
             if let Some(element) = sibling.value().as_element() {
                 // Stop if we hit another heading
-                if element.name() == "h2" || element.name() == "h3" {
+                let tag = element.name();
+                if tag == "h2" || tag == "h3" || tag == "h4" {
                     break;
                 }
 
                 // Look for table elements
-                if element.name() == "table" {
+                if tag == "table" {
                     let parameters = self.parse_parameter_table(ElementRef::wrap(sibling).unwrap());
 
                     // Separate into required and optional
@@ -493,14 +529,109 @@ impl<'a> ContentExtractor<'a> {
                             optional_params.push(param);
                         }
                     }
-
-                    // Continue looking for more tables (some endpoints might have multiple)
                 }
             }
 
             current = sibling.next_sibling();
         }
 
+        // If we found parameters in tables, return them
+        if !required_params.is_empty() || !optional_params.is_empty() {
+            return (required_params, optional_params);
+        }
+
+        // Fallback: Try to extract from paragraphs (new format)
+        self.extract_parameters_from_paragraphs(h3_element)
+    }
+
+    /// Extract parameters from paragraph-based layout.
+    ///
+    /// # Arguments
+    /// * `heading` - The endpoint heading element
+    ///
+    /// # Returns
+    /// A tuple of (required_parameters, optional_parameters)
+    fn extract_parameters_from_paragraphs(&self, heading: ElementRef) -> (Vec<Parameter>, Vec<Parameter>) {
+        use crate::domain::parser::extract_text;
+
+        let mut required_params = Vec::new();
+        let mut optional_params = Vec::new();
+        
+        let mut current = heading.next_sibling();
+        let mut pending_param: Option<(String, bool)> = None; // (name, is_required)
+
+        while let Some(sibling) = current {
+            if let Some(element) = sibling.value().as_element() {
+                let tag_name = element.name();
+                if tag_name == "h2" || tag_name == "h3" || tag_name == "h4" {
+                    break;
+                }
+
+                if tag_name == "p" {
+                    let text = extract_text(&ElementRef::wrap(sibling).unwrap());
+                    
+                    // Check for parameter definition line
+                    // Format: "❚ Required: function" or "❚ Optional: outputsize"
+                    if text.contains("Required:") || text.contains("Optional:") {
+                         // Parse definition
+                         let p_element = ElementRef::wrap(sibling).unwrap();
+                         let code_selector = Selector::parse("code").unwrap();
+                         
+                         // Try to find code tag first
+                         let param_name_opt = if let Some(code_el) = p_element.select(&code_selector).next() {
+                             Some(extract_text(&code_el))
+                         } else {
+                             // Fallback: extract last word?
+                             None
+                         };
+
+                         if let Some(param_name) = param_name_opt {
+                             let is_required = text.contains("Required:");
+                             
+                             // If we had a pending param, save it with default description
+                             if let Some((name, req)) = pending_param.take() {
+                                 let p = Parameter::new(name, "string".to_string(), "No description available".to_string());
+                                 if req { required_params.push(p); } else { optional_params.push(p); }
+                             }
+                             
+                             pending_param = Some((param_name, is_required));
+                         }
+                    } else if let Some((name, is_required)) = pending_param.take() {
+                         // This paragraph is likely the description for the pending param
+                         let description = text;
+                         let mut param = Parameter::new(name, "string".to_string(), description.clone());
+                         
+                         // Basic heuristic for default values
+                         if description.contains("default=") || description.contains("default is") {
+                             // Extract simple default if possible, or just leave as is
+                             if let Some(idx) = description.find("default=") {
+                                 let rest = &description[idx + 8..];
+                                 let default_val = rest.split_whitespace().next().unwrap_or("").trim_matches('.').to_string();
+                                 if !default_val.is_empty() {
+                                     param = param.with_default(default_val);
+                                 }
+                             } else if description.contains("compact") {
+                                 param = param.with_default("compact".to_string());
+                             }
+                         }
+                         
+                         if is_required {
+                             required_params.push(param);
+                         } else {
+                             optional_params.push(param);
+                         }
+                    }
+                }
+            }
+            current = sibling.next_sibling();
+        }
+        
+        // Handle last pending param
+        if let Some((name, req)) = pending_param {
+             let p = Parameter::new(name, "string".to_string(), "No description available".to_string());
+             if req { required_params.push(p); } else { optional_params.push(p); }
+        }
+        
         (required_params, optional_params)
     }
 
@@ -683,6 +814,17 @@ impl<'a> ContentExtractor<'a> {
                     if self.is_python_code(&raw_code) {
                         let cleaned_code = self.clean_code_block(&raw_code);
                         return Some(CodeExample::python(cleaned_code));
+                    }
+                } else if element.name() == "div" {
+                    // Check if div contains pre/code (common in layout)
+                    let div_element = ElementRef::wrap(sibling).unwrap();
+                    let pre_selector = Selector::parse("pre").unwrap();
+                    if let Some(pre) = div_element.select(&pre_selector).next() {
+                        let raw_code = crate::domain::parser::extract_text(&pre);
+                        if self.is_python_code(&raw_code) {
+                            let cleaned_code = self.clean_code_block(&raw_code);
+                            return Some(CodeExample::python(cleaned_code));
+                        }
                     }
                 }
             }
@@ -1500,24 +1642,31 @@ mod tests {
     #[test]
     fn test_parse_category_with_endpoints() {
         let html = r#"
-            <h2>Time Series Data</h2>
-            <p>Time series category description.</p>
-            <h3>TIME_SERIES_DAILY</h3>
-            <p>Daily time series endpoint.</p>
-            <h3>TIME_SERIES_INTRADAY</h3>
-            <p>Intraday time series endpoint.</p>
+            <div id="main">
+                <h2>Time Series Data</h2>
+                <p>Time series category description.</p>
+                <h3>TIME_SERIES_DAILY</h3>
+                <p>Daily time series endpoint.</p>
+                <h3>TIME_SERIES_INTRADAY</h3>
+                <p>Intraday time series endpoint.</p>
+            </div>
         "#;
         let document = Html::parse_fragment(html);
         let extractor = ContentExtractor::new(&document);
 
-        let h2 = document
-            .select(&Selector::parse("h2").unwrap())
+        let main = document
+            .select(&Selector::parse("#main").unwrap())
             .next()
             .unwrap();
-        let result = extractor.parse_category(h2);
+        
+        // Use extract_categories instead of parse_category since parse_category no longer extracts endpoints
+        let result = extractor.extract_categories(main);
 
         assert!(result.is_ok());
-        let category = result.unwrap();
+        let categories = result.unwrap();
+        assert_eq!(categories.len(), 1);
+        let category = &categories[0];
+        
         assert_eq!(category.name, "Time Series Data");
         assert_eq!(
             category.description,
@@ -1534,8 +1683,12 @@ mod tests {
             <div id="main">
                 <h2>Time Series</h2>
                 <p>Description of time series.</p>
+                <h3>TIME_SERIES_DAILY</h3>
+                <p>Daily data.</p>
                 <h2>Fundamental Data</h2>
                 <p>Description of fundamental data.</p>
+                <h3>OVERVIEW</h3>
+                <p>Company overview.</p>
             </div>
         "#;
         let document = Html::parse_fragment(html);
@@ -1551,7 +1704,9 @@ mod tests {
         let categories = result.unwrap();
         assert_eq!(categories.len(), 2);
         assert_eq!(categories[0].name, "Time Series");
+        assert_eq!(categories[0].endpoints.len(), 1);
         assert_eq!(categories[1].name, "Fundamental Data");
+        assert_eq!(categories[1].endpoints.len(), 1);
     }
 
     #[test]

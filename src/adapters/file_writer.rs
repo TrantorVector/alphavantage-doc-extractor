@@ -86,6 +86,11 @@ impl FileWriter {
 
         // Check parent directory
         if let Some(parent) = path_obj.parent() {
+            // Skip check if parent is empty (current directory)
+            if parent.as_os_str().is_empty() {
+                return Ok(());
+            }
+
             if !parent.exists() {
                 // Try to create parent directories
                 fs::create_dir_all(parent).map_err(|e| {
