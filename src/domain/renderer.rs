@@ -8,7 +8,7 @@
 //! the conversion from domain models to markdown strings.
 
 use crate::domain::{ApiCategory, ApiEndpoint, CodeExample, DocumentStructure, Parameter};
-use crate::utils::error::RenderResult;
+use crate::utils::error::{RenderError, RenderResult};
 use tracing::instrument;
 
 /// Markdown renderer for API documentation.
@@ -49,6 +49,18 @@ impl MarkdownRenderer {
 
         // Apply LLM optimizations
         let optimized = self.optimize_for_llm(markdown, &document.metadata, &document.categories);
+
+        // Validate the output
+        let validator = OutputValidator::new();
+        let validation_report = validator.validate(&optimized)?;
+
+        if !validation_report.is_valid() {
+            return Err(RenderError::ValidationFailed(format!(
+                "Output validation failed with {} errors and {} warnings",
+                validation_report.errors.len(),
+                validation_report.warnings.len()
+            )));
+        }
 
         Ok(optimized)
     }
@@ -788,4 +800,579 @@ print(response.json())"#
         assert!(result.contains("<!-- CATEGORY: Test Category -->"));
         assert!(result.contains("<!-- ENDPOINT: TEST_ENDPOINT -->"));
     }
+
+    /// Test validation of valid markdown output
+    #[test]
+    fn test_validate_valid_markdown() {
+        let validator = OutputValidator::new();
+
+        let valid_markdown = r#"---
+title: "Test API"
+source: "https://api.example.com"
+extracted_at: "2024-01-01T00:00:00Z"
+endpoint_count: 2
+category_count: 1
+format_version: "2.0"
+---
+
+## Table of Contents
+
+- [Test Category](#test-category)
+  - [TEST_ENDPOINT](#test-endpoint)
+
+## Test Category
+
+This is a test category.
+
+### TEST_ENDPOINT
+
+This is a test endpoint.
+
+**Required Parameters:**
+
+| Parameter | Type | Description | Default | Options |
+|-----------|------|-------------|---------|---------|
+| api_key | string | API key | - | - |
+
+```python
+import requests
+response = requests.get("https://api.example.com")
+```
+
+**API Request Pattern:**
+
+```http
+GET https://api.example.com/query?function=TEST_ENDPOINT&apikey={api_key}
+```
+"#;
+
+        let result = validator.validate(valid_markdown);
+        assert!(result.is_ok());
+
+        let report = result.unwrap();
+        assert!(report.is_valid());
+        assert!(report.errors.is_empty());
+        assert!(report.warnings.is_empty());
+        assert_eq!(report.metadata.endpoint_count, 1);
+        assert_eq!(report.metadata.section_count, 2); // TOC + category
+        assert_eq!(report.metadata.code_block_count, 2); // Python + HTTP
+    }
+
+    /// Test detection of HTML artifacts
+    #[test]
+    fn test_validate_html_artifacts() {
+        let validator = OutputValidator::new();
+
+        let invalid_markdown = r#"---
+title: "Test API"
+---
+
+## Test Category
+
+<script>alert('xss')</script>
+
+### TEST_ENDPOINT
+
+<div class="content">Content</div>
+"#;
+
+        let result = validator.validate(invalid_markdown);
+        assert!(result.is_ok());
+
+        let report = result.unwrap();
+        assert!(!report.is_valid());
+        assert!(report.errors.len() >= 2); // Should catch <script and <div
+        assert!(report.errors.iter().any(|e| e.contains("<script")));
+        assert!(report.errors.iter().any(|e| e.contains("<div")));
+    }
+
+    /// Test detection of unbalanced code fences
+    #[test]
+    fn test_validate_unbalanced_code_fences() {
+        let validator = OutputValidator::new();
+
+        let invalid_markdown = r#"---
+title: "Test API"
+---
+
+## Test Category
+
+### TEST_ENDPOINT
+
+```python
+print("hello")
+# Missing closing fence
+
+### ANOTHER_ENDPOINT
+
+Some text
+"#;
+
+        let result = validator.validate(invalid_markdown);
+        assert!(result.is_ok());
+
+        let report = result.unwrap();
+        assert!(!report.is_valid());
+        assert!(report
+            .errors
+            .iter()
+            .any(|e| e.contains("Unbalanced code fences")));
+    }
+
+    /// Test heading hierarchy validation
+    #[test]
+    fn test_validate_heading_hierarchy() {
+        let validator = OutputValidator::new();
+
+        let invalid_markdown = r#"---
+title: "Test API"
+---
+
+## Table of Contents
+
+### INVALID_HEADING
+
+Content without category heading
+"#;
+
+        let result = validator.validate(invalid_markdown);
+        assert!(result.is_ok());
+
+        let report = result.unwrap();
+        assert!(!report.is_valid());
+        // Should detect missing category or invalid hierarchy
+    }
+
+    /// Test duplicate endpoint detection
+    #[test]
+    fn test_validate_duplicate_endpoints() {
+        let validator = OutputValidator::new();
+
+        let invalid_markdown = r#"---
+title: "Test API"
+---
+
+## Table of Contents
+
+## Test Category
+
+### DUPLICATE_ENDPOINT
+
+First endpoint
+
+### DUPLICATE_ENDPOINT
+
+Second endpoint with same name
+"#;
+
+        let result = validator.validate(invalid_markdown);
+        assert!(result.is_ok());
+
+        let report = result.unwrap();
+        assert!(report
+            .warnings
+            .iter()
+            .any(|w| w.contains("Duplicate endpoint found")));
+    }
+
+    /// Test minimum content validation
+    #[test]
+    fn test_validate_minimum_content() {
+        let validator = OutputValidator::new();
+
+        let invalid_markdown = r#"---
+title: "Test API"
+---
+
+## Table of Contents
+
+## Test Category
+
+No endpoints here
+"#;
+
+        let result = validator.validate(invalid_markdown);
+        assert!(result.is_ok());
+
+        let report = result.unwrap();
+        assert!(!report.is_valid());
+        assert!(report
+            .errors
+            .iter()
+            .any(|e| e.contains("Insufficient content")));
+    }
+
+    /// Test required sections validation
+    #[test]
+    fn test_validate_required_sections() {
+        let validator = OutputValidator::new();
+
+        // Missing frontmatter
+        let invalid_markdown = r#"## Table of Contents
+
+## Test Category
+
+### TEST_ENDPOINT
+
+Content
+"#;
+
+        let result = validator.validate(invalid_markdown);
+        assert!(result.is_ok());
+
+        let report = result.unwrap();
+        assert!(!report.is_valid());
+        assert!(report
+            .errors
+            .iter()
+            .any(|e| e.contains("Missing YAML frontmatter")));
+    }
+
+    /// Test ValidationReport methods
+    #[test]
+    fn test_validation_report_methods() {
+        let report = ValidationReport {
+            errors: vec!["Error 1".to_string(), "Error 2".to_string()],
+            warnings: vec!["Warning 1".to_string()],
+            metadata: ValidationMetadata {
+                total_length: 100,
+                line_count: 10,
+                section_count: 2,
+                endpoint_count: 3,
+                code_block_count: 1,
+            },
+        };
+
+        assert!(!report.is_valid());
+
+        // Test with no errors
+        let valid_report = ValidationReport {
+            errors: vec![],
+            warnings: vec!["Just a warning".to_string()],
+            metadata: ValidationMetadata {
+                total_length: 200,
+                line_count: 20,
+                section_count: 1,
+                endpoint_count: 2,
+                code_block_count: 0,
+            },
+        };
+
+        assert!(valid_report.is_valid());
+    }
+}
+
+/// Output validator for markdown documents.
+///
+/// Validates generated markdown for correctness, completeness, and adherence
+/// to formatting standards. Catches issues like HTML artifacts, unbalanced
+/// code fences, and structural problems.
+pub struct OutputValidator;
+
+impl Default for OutputValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl OutputValidator {
+    /// Create a new OutputValidator instance.
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Validate markdown output and return a comprehensive report.
+    ///
+    /// Runs all validation checks and collects errors and warnings.
+    /// Returns a ValidationReport with detailed findings.
+    pub fn validate(&self, markdown: &str) -> Result<ValidationReport, RenderError> {
+        let mut errors = Vec::new();
+        let mut warnings = Vec::new();
+
+        // Run all validation checks
+        errors.extend(self.check_no_html_artifacts(markdown));
+        errors.extend(self.check_proper_heading_hierarchy(markdown));
+        errors.extend(self.check_code_fences_balanced(markdown));
+        warnings.extend(self.check_table_formatting(markdown));
+        errors.extend(self.check_minimum_content(markdown, 1)); // At least 1 endpoint
+        warnings.extend(self.check_no_duplicate_sections(markdown));
+        errors.extend(self.check_required_sections_present(markdown));
+
+        // Collect metadata
+        let metadata = self.collect_validation_metadata(markdown);
+
+        Ok(ValidationReport {
+            errors,
+            warnings,
+            metadata,
+        })
+    }
+
+    /// Check for HTML artifacts that shouldn't be in markdown output.
+    fn check_no_html_artifacts(&self, markdown: &str) -> Vec<String> {
+        let mut errors = Vec::new();
+
+        let html_artifacts = [
+            "<script", "<style", "<nav", "<footer", "<header", "&lt;", "&gt;", "&amp;", "<div",
+            "<span",
+        ];
+
+        for artifact in &html_artifacts {
+            if markdown.contains(artifact) {
+                errors.push(format!("Found HTML artifact '{}' in output", artifact));
+            }
+        }
+
+        errors
+    }
+
+    /// Check that heading hierarchy is proper (no skipped levels).
+    fn check_proper_heading_hierarchy(&self, markdown: &str) -> Vec<String> {
+        let mut errors = Vec::new();
+        let mut last_level = 0;
+
+        for line in markdown.lines() {
+            if line.starts_with('#') {
+                let level = line.chars().take_while(|&c| c == '#').count();
+
+                // Skip H1 as it's the document title
+                if level == 1 {
+                    continue;
+                }
+
+                // Check for skipped levels (e.g., ### without ##)
+                if level > last_level + 1 && last_level > 0 {
+                    errors.push(format!(
+                        "Skipped heading level: found H{} after H{} on line: {}",
+                        level, last_level, line
+                    ));
+                }
+
+                // Categories should be H2, endpoints should be H3
+                if level == 2 && !line.contains("Table of Contents") {
+                    // Valid category heading
+                } else if level == 3 {
+                    // Valid endpoint heading
+                } else if level > 3 {
+                    errors.push(format!("Invalid heading level {}: {}", level, line));
+                }
+
+                last_level = level;
+            }
+        }
+
+        errors
+    }
+
+    /// Check that code fences are properly balanced.
+    fn check_code_fences_balanced(&self, markdown: &str) -> Vec<String> {
+        let mut errors = Vec::new();
+        let fence_count = markdown.matches("```").count();
+
+        if fence_count % 2 != 0 {
+            errors.push(format!(
+                "Unbalanced code fences: found {} occurrences of ``` (should be even)",
+                fence_count
+            ));
+        }
+
+        errors
+    }
+
+    /// Check that markdown tables are properly formatted.
+    fn check_table_formatting(&self, markdown: &str) -> Vec<String> {
+        let mut warnings = Vec::new();
+
+        for (line_num, line) in markdown.lines().enumerate() {
+            if line.contains('|') && !line.trim().starts_with('|') {
+                // Likely a table row, check if it's part of a table
+                let lines: Vec<&str> = markdown.lines().collect();
+                let start = line_num.saturating_sub(2);
+                let end = (line_num + 3).min(lines.len());
+
+                let context: Vec<&str> = lines[start..end].to_vec();
+                let context_str = context.join("\n");
+
+                // Check for table pattern: header | separator | data
+                if context_str.contains('|') && context_str.contains("---") {
+                    // Check for header separator row
+                    let has_separator =
+                        context.iter().any(|l| l.contains("---") && l.contains('|'));
+                    if !has_separator {
+                        warnings.push(format!(
+                            "Table at line {} missing header separator row",
+                            line_num + 1
+                        ));
+                    }
+                }
+            }
+        }
+
+        warnings
+    }
+
+    /// Check that minimum content requirements are met.
+    fn check_minimum_content(&self, markdown: &str, min_endpoints: usize) -> Vec<String> {
+        let mut errors = Vec::new();
+
+        let endpoint_count = markdown
+            .lines()
+            .filter(|line| line.starts_with("### "))
+            .count();
+
+        if endpoint_count < min_endpoints {
+            errors.push(format!(
+                "Insufficient content: found {} endpoints, minimum required is {}",
+                endpoint_count, min_endpoints
+            ));
+        }
+
+        errors
+    }
+
+    /// Check for duplicate endpoint sections.
+    fn check_no_duplicate_sections(&self, markdown: &str) -> Vec<String> {
+        let mut warnings = Vec::new();
+        let mut seen_endpoints = std::collections::HashSet::new();
+
+        for line in markdown.lines() {
+            if line.starts_with("### ") {
+                let endpoint_name = line
+                    .strip_prefix("### ")
+                    .unwrap_or("")
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("");
+                if !endpoint_name.is_empty() {
+                    if seen_endpoints.contains(endpoint_name) {
+                        warnings.push(format!("Duplicate endpoint found: {}", endpoint_name));
+                    } else {
+                        seen_endpoints.insert(endpoint_name.to_string());
+                    }
+                }
+            }
+        }
+
+        warnings
+    }
+
+    /// Check that required sections are present.
+    fn check_required_sections_present(&self, markdown: &str) -> Vec<String> {
+        let mut errors = Vec::new();
+
+        // Check for frontmatter
+        if !markdown.trim_start().starts_with("---") {
+            errors.push("Missing YAML frontmatter (---) at start of document".to_string());
+        }
+
+        // Check for table of contents
+        if !markdown.contains("## Table of Contents") {
+            errors.push("Missing Table of Contents section".to_string());
+        }
+
+        // Check for at least one category
+        let category_count = markdown
+            .lines()
+            .filter(|line| line.starts_with("## ") && !line.contains("Table of Contents"))
+            .count();
+
+        if category_count == 0 {
+            errors.push("No API categories found in document".to_string());
+        }
+
+        errors
+    }
+
+    /// Collect metadata about the markdown document.
+    fn collect_validation_metadata(&self, markdown: &str) -> ValidationMetadata {
+        let total_length = markdown.len();
+        let line_count = markdown.lines().count();
+
+        let section_count = markdown
+            .lines()
+            .filter(|line| line.starts_with("## "))
+            .count();
+
+        let endpoint_count = markdown
+            .lines()
+            .filter(|line| line.starts_with("### "))
+            .count();
+
+        let code_block_count = markdown.matches("```").count() / 2; // Each block has opening and closing
+
+        ValidationMetadata {
+            total_length,
+            line_count,
+            section_count,
+            endpoint_count,
+            code_block_count,
+        }
+    }
+}
+
+/// Report containing validation results and metadata.
+#[derive(Debug, Clone)]
+pub struct ValidationReport {
+    /// Critical errors that prevent the output from being usable.
+    pub errors: Vec<String>,
+    /// Non-critical warnings about potential issues.
+    pub warnings: Vec<String>,
+    /// Metadata about the validated document.
+    pub metadata: ValidationMetadata,
+}
+
+impl ValidationReport {
+    /// Check if the validation passed (no errors).
+    pub fn is_valid(&self) -> bool {
+        self.errors.is_empty()
+    }
+
+    /// Print a formatted validation report.
+    pub fn print_report(&self) {
+        println!("=== Validation Report ===");
+        println!("Metadata:");
+        println!("  Total length: {} characters", self.metadata.total_length);
+        println!("  Line count: {}", self.metadata.line_count);
+        println!("  Section count: {}", self.metadata.section_count);
+        println!("  Endpoint count: {}", self.metadata.endpoint_count);
+        println!("  Code block count: {}", self.metadata.code_block_count);
+        println!();
+
+        if self.is_valid() {
+            println!("✅ Validation PASSED");
+        } else {
+            println!("❌ Validation FAILED");
+            println!();
+
+            if !self.errors.is_empty() {
+                println!("Errors:");
+                for error in &self.errors {
+                    println!("  - {}", error);
+                }
+                println!();
+            }
+        }
+
+        if !self.warnings.is_empty() {
+            println!("Warnings:");
+            for warning in &self.warnings {
+                println!("  - {}", warning);
+            }
+        }
+    }
+}
+
+/// Metadata collected during validation.
+#[derive(Debug, Clone)]
+pub struct ValidationMetadata {
+    /// Total character count of the document.
+    pub total_length: usize,
+    /// Number of lines in the document.
+    pub line_count: usize,
+    /// Number of sections (H2 headings).
+    pub section_count: usize,
+    /// Number of endpoints (H3 headings).
+    pub endpoint_count: usize,
+    /// Number of code blocks.
+    pub code_block_count: usize,
 }
